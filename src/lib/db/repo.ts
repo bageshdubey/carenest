@@ -122,6 +122,16 @@ export async function logMessage(familyId: string | null, direction: "in" | "out
   return true;
 }
 
+/** "Got it" on the dashboard. Only touches alerts of this family. */
+export async function markAlertSeen(familyId: string, alertId: string) {
+  must(await admin().from("alerts").update({ seen_at: new Date().toISOString() }).eq("id", alertId).eq("family_id", familyId).is("seen_at", null));
+}
+
+/** Once the child approves a list, its "new list" alerts are handled. */
+export async function markNewListSeen(familyId: string) {
+  must(await admin().from("alerts").update({ seen_at: new Date().toISOString() }).eq("family_id", familyId).eq("kind", "new_list").is("seen_at", null));
+}
+
 export async function addAlert(familyId: string, kind: string, severity: "check" | "urgent", detail: Record<string, unknown>, sentToWhatsapp: boolean) {
   must(await admin().from("alerts").insert({ family_id: familyId, kind, severity, detail, sent_to_whatsapp: sentToWhatsapp }));
 }

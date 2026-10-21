@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { readDocument } from "@/lib/ai/gemini";
 import { toParent } from "@/lib/bot/send";
-import { savePrescription, uploadPhoto } from "@/lib/db/repo";
+import { markAlertSeen, markNewListSeen, savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { toMedicine } from "@/lib/db/rows";
 import { mealsInOrder } from "@/lib/domain/meals";
 import { makeLinkCode, normalisePhone } from "@/lib/domain/safety";
@@ -147,6 +147,11 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
 
   if (mode === "pending" && prescriptionId) {
     await supabase.from("prescriptions").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", prescriptionId);
+    try {
+      await markNewListSeen(family.id);
+    } catch (e) {
+      console.error("Could not mark the new-list alert as seen", e);
+    }
   }
 
   // Tell the parent their checked list, if they are already on WhatsApp.
@@ -186,6 +191,15 @@ export async function updateSettings(_prev: ActionResult | null, formData: FormD
   if (error) return { ok: false, error: "save" };
   revalidatePath("/home");
   return { ok: true };
+}
+
+/** "Got it" on an alert: hides it from Home and the bell. It stays in the Alerts tab. */
+export async function dismissAlert(formData: FormData) {
+  const { family } = await requireFamily();
+  const id = String(formData.get("id") ?? "");
+  if (!/^[0-9a-f-]{36}$/.test(id)) return;
+  await markAlertSeen(family.id, id);
+  revalidatePath("/home");
 }
 
 export async function signOut() {

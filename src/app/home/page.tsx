@@ -1,5 +1,6 @@
 import { Bell, FileText, House, MessageCircle, Pill as PillIcon, Settings, Siren } from "lucide-react";
 import Link from "next/link";
+import { dismissAlert } from "@/app/actions";
 import { Card, CardHead, FlagPill, MonthGrid, Pill, RangeBar, Ring, WeekBars } from "@/components/app/dashboard";
 import { CopyButton } from "@/components/app/copy-button";
 import { SettingsForm } from "@/components/app/settings-form";
@@ -20,7 +21,7 @@ type Tab = (typeof TABS)[number];
 
 type Report = { id: string; lab: string | null; report_date: string | null; created_at: string; values: ReportValue[] };
 type Message = { id: string; direction: "in" | "out"; body: string; created_at: string };
-type Alert = { id: string; kind: string; severity: "check" | "urgent"; detail: { text?: string } | null; sent_to_whatsapp: boolean; created_at: string };
+type Alert = { id: string; kind: string; severity: "check" | "urgent"; detail: { text?: string } | null; sent_to_whatsapp: boolean; created_at: string; seen_at?: string | null };
 
 /** Alert text as written for WhatsApp, without the "CareNest:" prefix or the link back to this app. */
 function alertText(a: Alert): string {
@@ -29,6 +30,18 @@ function alertText(a: Alert): string {
     .replace(/:?\s*https?:\/\/\S+/g, "")
     .trim();
   return !text || /[.!?।]$/.test(text) ? text : `${text}.`;
+}
+
+/** "Got it": marks the alert seen so it leaves Home and the bell. */
+function GotIt({ id, label }: { id: string; label: string }) {
+  return (
+    <form action={dismissAlert}>
+      <input type="hidden" name="id" value={id} />
+      <button type="submit" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 rounded-lg px-2.5 text-xs")}>
+        {label}
+      </button>
+    </form>
+  );
 }
 
 export default async function HomePage({ searchParams }: PageProps<"/home">) {
@@ -63,10 +76,10 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const todayDoses = doses.filter((d) => d.dose_date === today);
   const statusOf = (k: MealKey) => todayDoses.find((d) => d.meal === k)?.status ?? "upcoming";
   const missedToday = todayDoses.some((d) => d.status === "missed");
-  const todayAlerts = alerts.filter((a) => istNow(new Date(a.created_at)).date === today);
+  const unseen = alerts.filter((a) => !a.seen_at);
   // "New list" has its own Check bar while a list is pending, so it is never a Home banner.
-  const homeAlerts = todayAlerts.filter((a) => a.kind !== "new_list");
-  const urgent = todayAlerts.some((a) => a.severity === "urgent");
+  const homeAlerts = unseen.filter((a) => a.kind !== "new_list");
+  const urgent = alerts.some((a) => a.severity === "urgent" && istNow(new Date(a.created_at)).date === today);
   const flagLabels = { high: t("high"), low: t("low"), inRange: t("inRange"), noRange: t("noRange") };
 
   const status = !family.parent_linked_at ? (
@@ -87,7 +100,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
         </div>
         <Link href="/home?tab=alerts" aria-label={t("t_alerts")} className="relative grid size-10 place-items-center rounded-xl border">
           <Bell className="size-5" aria-hidden />
-          {todayAlerts.length ? <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[11px] font-bold text-card">{todayAlerts.length}</span> : null}
+          {unseen.length ? <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[11px] font-bold text-card">{unseen.length}</span> : null}
         </Link>
       </header>
 
@@ -111,7 +124,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
             {homeAlerts.slice(0, 2).map((a) => (
               <div key={a.id} className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm ${a.severity === "urgent" ? "bg-bad-soft text-bad" : "bg-warn-soft text-warn"}`}>
                 {a.severity === "urgent" ? <Siren className="mt-0.5 size-4 shrink-0" aria-hidden /> : <Bell className="mt-0.5 size-4 shrink-0" aria-hidden />}
-                <span>{alertText(a)}</span>
+                <span className="flex-1">{alertText(a)}</span>
+                <GotIt id={a.id} label={t("gotIt")} />
               </div>
             ))}
 
@@ -267,7 +281,10 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                     {a.sent_to_whatsapp ? t("sentWa") : t("dashboardOnly")}
                   </p>
                 </div>
-                {a.severity === "urgent" ? <Pill tone="bad">{t("urgent")}</Pill> : null}
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  {a.severity === "urgent" ? <Pill tone="bad">{t("urgent")}</Pill> : null}
+                  {a.seen_at ? <span className="text-xs text-muted-foreground">{t("seen")}</span> : <GotIt id={a.id} label={t("gotIt")} />}
+                </div>
               </Card>
             ))
           ) : (
