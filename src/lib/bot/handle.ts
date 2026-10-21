@@ -1,5 +1,5 @@
 import "server-only";
-import { answerQuestion, readDocument } from "@/lib/ai/gemini";
+import { AiBusyError, answerQuestion, readDocument } from "@/lib/ai/gemini";
 import {
   activeMedicines,
   familyByCode,
@@ -25,6 +25,17 @@ import type { Incoming } from "@/lib/whatsapp/webhook";
 import { alertChild, toParent } from "./send";
 
 const v = (f: FamilyRow) => ({ n: f.parent_call_name, c: f.child_name, p: f.child_phone ?? "" });
+
+/** Runs an AI call. If Gemini stays busy, asks the parent to send again and returns null. */
+async function orBusy<T>(family: FamilyRow, call: () => Promise<T>): Promise<T | null> {
+  try {
+    return await call();
+  } catch (e) {
+    if (!(e instanceof AiBusyError)) throw e;
+    await toParent(family, pm(family.parent_lang, "busy", v(family)));
+    return null;
+  }
+}
 
 function menu(f: FamilyRow) {
   return [
@@ -88,7 +99,9 @@ export async function handleIncoming(msg: Incoming) {
       await toParent(family, pm(lang, pending ? "waiting" : "noList", v(family)));
       return;
     }
-    const { intent, answer } = await answerQuestion(text, meds, lang);
+    const reply = await orBusy(family, () => answerQuestion(text, meds, lang));
+    if (!reply) return;
+    const { intent, answer } = reply;
     if (intent === "about_my_medicines" && answer) {
       await toParent(family, `${answer}\n\n${pm(lang, "footer")}`, menu(family));
     } else if (intent === "advice") {
@@ -107,7 +120,8 @@ async function handleDocument(family: FamilyRow, mediaId: string, mimeType: stri
   const lang = family.parent_lang;
   const { bytes, mimeType: mime } = await downloadMedia(mediaId);
   const photoPath = await uploadPhoto(family.id, bytes, mime || mimeType);
-  const result = await readDocument(bytes, mime || mimeType);
+  const result = await orBusy(family, () => readDocument(bytes, mime || mimeType));
+  if (!result) return;
 
   if (result.type === "prescription") {
     await savePrescription({

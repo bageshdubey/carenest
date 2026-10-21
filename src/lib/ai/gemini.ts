@@ -1,4 +1,4 @@
-import { FinishReason, GoogleGenAI, type Part } from "@google/genai";
+import { ApiError, FinishReason, GoogleGenAI, type GenerateContentParameters, type Part } from "@google/genai";
 import * as z from "zod/v4";
 import { flagValue, parseRange } from "@/lib/domain/report";
 import type { Food, MealKey, Medicine, ParentLang, ReportValue } from "@/lib/domain/types";
@@ -10,18 +10,41 @@ import type { Food, MealKey, Medicine, ParentLang, ReportValue } from "@/lib/dom
  */
 /** Can be changed in env without a code change. */
 const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+/** Tried when the main model stays busy. */
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash";
 let _client: GoogleGenAI | null = null;
 /** Created on first use, so builds work without the API key set. */
 function gemini(): GoogleGenAI {
   return (_client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }));
 }
 
-/** Asks for JSON matching the schema. Null if Gemini blocked it, stopped early, or the JSON does not match. */
+/** Thrown when Gemini stays busy after every retry, so the bot can ask the parent to send again. */
+export class AiBusyError extends Error {}
+
+const BUSY_STATUS = new Set([429, 500, 503]);
+const TRIES_PER_MODEL = 3;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Busy errors are common on Gemini: retry each model with short waits (1 s, 2 s), then the fallback model. */
+async function generate(params: Omit<GenerateContentParameters, "model">) {
+  for (const model of [MODEL, FALLBACK_MODEL]) {
+    for (let attempt = 0; attempt < TRIES_PER_MODEL; attempt++) {
+      try {
+        return await gemini().models.generateContent({ ...params, model });
+      } catch (e) {
+        if (!(e instanceof ApiError && BUSY_STATUS.has(e.status))) throw e;
+        if (attempt < TRIES_PER_MODEL - 1) await sleep(1000 * 2 ** attempt);
+      }
+    }
+  }
+  throw new AiBusyError("Gemini stayed busy on every try");
+}
+
+/** Asks for JSON matching the schema. Null if Gemini blocked it, stopped early, or the JSON does not match. Throws AiBusyError if Gemini stays busy. */
 async function generateJson<T extends z.ZodType>(schema: T, systemInstruction: string, parts: Part[]): Promise<z.infer<T> | null> {
   const jsonSchema: Record<string, unknown> = { ...z.toJSONSchema(schema) };
   delete jsonSchema.$schema;
-  const response = await gemini().models.generateContent({
-    model: MODEL,
+  const response = await generate({
     contents: [{ role: "user", parts }],
     config: { systemInstruction, responseMimeType: "application/json", responseJsonSchema: jsonSchema },
   });
