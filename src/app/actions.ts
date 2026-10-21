@@ -217,9 +217,9 @@ export async function saveVisit(formData: FormData) {
   const date = String(formData.get("date") ?? "");
   const time = String(formData.get("time") ?? "");
   const doctor = String(formData.get("doctor") ?? "").trim().slice(0, 80);
-  if (!ISO_DATE.test(date) || date < today) return;
-  await supabase.from("visits").delete().eq("family_id", family.id).gte("visit_date", today);
-  await supabase.from("visits").insert({
+  if (!ISO_DATE.test(date) || date < today) redirect("/home?visit=failed");
+  const del = await supabase.from("visits").delete().eq("family_id", family.id).gte("visit_date", today);
+  const ins = await supabase.from("visits").insert({
     family_id: family.id,
     visit_date: date,
     visit_time: TIME.test(time) ? time : null,
@@ -227,20 +227,27 @@ export async function saveVisit(formData: FormData) {
     source: "child",
     status: "confirmed",
   });
+  if (del.error || ins.error) {
+    console.error("Could not save the visit", del.error ?? ins.error);
+    redirect("/home?visit=failed");
+  }
   revalidatePath("/home");
+  redirect("/home");
 }
 
 /** The child confirms a date found on a photo. It replaces any other upcoming visit. */
 export async function confirmVisit(formData: FormData) {
   const { supabase, family } = await requireFamily();
   const id = String(formData.get("id") ?? "");
-  await supabase.from("visits").delete().eq("family_id", family.id).gte("visit_date", istNow().date).neq("id", id);
-  await supabase.from("visits").update({ status: "confirmed" }).eq("family_id", family.id).eq("id", id);
+  const del = await supabase.from("visits").delete().eq("family_id", family.id).gte("visit_date", istNow().date).neq("id", id);
+  const upd = await supabase.from("visits").update({ status: "confirmed" }).eq("family_id", family.id).eq("id", id);
+  if (del.error || upd.error) redirect("/home?visit=failed");
   revalidatePath("/home");
 }
 
 export async function removeVisit(formData: FormData) {
   const { supabase, family } = await requireFamily();
-  await supabase.from("visits").delete().eq("family_id", family.id).eq("id", String(formData.get("id") ?? ""));
+  const { error } = await supabase.from("visits").delete().eq("family_id", family.id).eq("id", String(formData.get("id") ?? ""));
+  if (error) redirect("/home?visit=failed");
   revalidatePath("/home");
 }

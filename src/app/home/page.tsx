@@ -174,7 +174,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
               </>
             )}
 
-            <VisitCard visits={visits} today={today} lang={lang} t={t} />
+            <VisitCard visits={visits} today={today} lang={lang} t={t} failed={sp.visit === "failed"} />
 
             {reports[0] && (
               <>

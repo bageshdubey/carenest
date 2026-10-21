@@ -28,13 +28,14 @@ function IdButton({ action, id, label, primary = false }: { action: (f: FormData
 }
 
 /** Add, change, confirm or remove the next doctor visit. A date read from a photo waits here for the child's check. */
-export function VisitCard({ visits, today, lang, t }: { visits: VisitRow[]; today: string; lang: ChildLang; t: T }) {
+export function VisitCard({ visits, today, lang, t, failed = false }: { visits: VisitRow[]; today: string; lang: ChildLang; t: T; failed?: boolean }) {
   const confirmed = visits.find((v) => v.status === "confirmed");
   const found = visits.find((v) => v.status === "pending");
 
   return (
     <Card>
       <CardHead title={t("nextVisitTitle")} />
+      {failed && <p className="rounded-xl bg-bad-soft px-3 py-2 text-sm text-bad">{t("visitFailed")}</p>}
       {found && (
         <div className="flex flex-col gap-2 rounded-xl bg-warn-soft px-3 py-2.5 text-sm text-warn">
           <span>{t("visitFound", { d: when(lang, found) })}</span>

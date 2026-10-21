@@ -137,11 +137,11 @@ export async function setMessageBody(waMessageId: string, body: string) {
   must(await admin().from("messages").update({ body }).eq("wa_message_id", waMessageId).eq("direction", "in"));
 }
 
-/** The next confirmed visit from today on, or null. */
+/** The next confirmed visit from today on, or null (also when it cannot be read, so the bot still answers). */
 export async function nextVisit(familyId: string, today: string): Promise<VisitRow | null> {
-  return must(
-    await admin().from("visits").select("*").eq("family_id", familyId).eq("status", "confirmed").gte("visit_date", today).order("visit_date").limit(1).maybeSingle(),
-  ) as VisitRow | null;
+  const res = await admin().from("visits").select("*").eq("family_id", familyId).eq("status", "confirmed").gte("visit_date", today).order("visit_date").limit(1).maybeSingle();
+  if (res.error) console.error("Could not read the next visit", res.error.message);
+  return (res.data as VisitRow | null) ?? null;
 }
 
 /** Confirmed visits on these dates, for the scheduler's reminders. */
