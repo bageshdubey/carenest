@@ -22,6 +22,15 @@ type Report = { id: string; lab: string | null; report_date: string | null; crea
 type Message = { id: string; direction: "in" | "out"; body: string; created_at: string };
 type Alert = { id: string; kind: string; severity: "check" | "urgent"; detail: { text?: string } | null; sent_to_whatsapp: boolean; created_at: string };
 
+/** Alert text as written for WhatsApp, without the "CareNest:" prefix or the link back to this app. */
+function alertText(a: Alert): string {
+  const text = (a.detail?.text ?? "")
+    .replace(/^CareNest( URGENT| तुरंत)?: /, "")
+    .replace(/:?\s*https?:\/\/\S+/g, "")
+    .trim();
+  return !text || /[.!?।]$/.test(text) ? text : `${text}.`;
+}
+
 export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const { supabase, family } = await requireFamily();
   const sp = await searchParams;
@@ -54,7 +63,10 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const todayDoses = doses.filter((d) => d.dose_date === today);
   const statusOf = (k: MealKey) => todayDoses.find((d) => d.meal === k)?.status ?? "upcoming";
   const missedToday = todayDoses.some((d) => d.status === "missed");
-  const urgent = alerts.some((a) => a.severity === "urgent" && istNow(new Date(a.created_at)).date === today);
+  const todayAlerts = alerts.filter((a) => istNow(new Date(a.created_at)).date === today);
+  // "New list" has its own Check bar while a list is pending, so it is never a Home banner.
+  const homeAlerts = todayAlerts.filter((a) => a.kind !== "new_list");
+  const urgent = todayAlerts.some((a) => a.severity === "urgent");
   const flagLabels = { high: t("high"), low: t("low"), inRange: t("inRange"), noRange: t("noRange") };
 
   const status = !family.parent_linked_at ? (
@@ -75,7 +87,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
         </div>
         <Link href="/home?tab=alerts" aria-label={t("t_alerts")} className="relative grid size-10 place-items-center rounded-xl border">
           <Bell className="size-5" aria-hidden />
-          {alerts.length ? <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[11px] font-bold text-card">{alerts.length}</span> : null}
+          {todayAlerts.length ? <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[11px] font-bold text-card">{todayAlerts.length}</span> : null}
         </Link>
       </header>
 
@@ -96,10 +108,10 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
 
         {tab === "home" && (
           <>
-            {alerts.slice(0, 2).map((a) => (
+            {homeAlerts.slice(0, 2).map((a) => (
               <div key={a.id} className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-sm ${a.severity === "urgent" ? "bg-bad-soft text-bad" : "bg-warn-soft text-warn"}`}>
                 {a.severity === "urgent" ? <Siren className="mt-0.5 size-4 shrink-0" aria-hidden /> : <Bell className="mt-0.5 size-4 shrink-0" aria-hidden />}
-                <span>{a.detail?.text?.replace(/^CareNest( URGENT| तुरंत)?: /, "")}</span>
+                <span>{alertText(a)}</span>
               </div>
             ))}
 
@@ -249,7 +261,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
               <Card key={a.id} className="flex-row items-start gap-3">
                 {a.severity === "urgent" ? <Siren className="mt-0.5 size-5 shrink-0 text-bad" aria-hidden /> : <Bell className="mt-0.5 size-5 shrink-0 text-warn" aria-hidden />}
                 <div className="min-w-0 flex-1">
-                  <p>{a.detail?.text?.replace(/^CareNest( URGENT| तुरंत)?: /, "")}</p>
+                  <p>{alertText(a)}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(a.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })} ·{" "}
                     {a.sent_to_whatsapp ? t("sentWa") : t("dashboardOnly")}
