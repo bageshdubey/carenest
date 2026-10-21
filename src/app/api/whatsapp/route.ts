@@ -3,7 +3,7 @@ import { handleIncoming } from "@/lib/bot/handle";
 import { parseWebhook, verifySignature } from "@/lib/whatsapp/webhook";
 
 // Reading a prescription photo can take a while; Meta only needs a quick 200.
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /** Meta calls this once when we register the webhook, to check the verify token. */
 export async function GET(request: Request) {

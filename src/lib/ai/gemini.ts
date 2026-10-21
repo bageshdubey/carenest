@@ -10,34 +10,46 @@ import type { Food, MealKey, Medicine, ParentLang, ReportValue } from "@/lib/dom
  */
 /** Can be changed in env without a code change. */
 const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
-/** Tried when the main model stays busy. */
-const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash";
+/** Tried when the main model stays busy or fails. */
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-flash-lite-latest";
 let _client: GoogleGenAI | null = null;
 /** Created on first use, so builds work without the API key set. */
 function gemini(): GoogleGenAI {
   return (_client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }));
 }
 
-/** Thrown when Gemini stays busy after every retry, so the bot can ask the parent to send again. */
+/** Thrown when Gemini gives no usable answer in time, so the bot can ask the parent to send again. */
 export class AiBusyError extends Error {}
 
 const BUSY_STATUS = new Set([429, 500, 503]);
 const TRIES_PER_MODEL = 3;
+/** One photo can take 20 to 80 s on Gemini. The webhook may run 300 s; this leaves time to save and reply. */
+const BUDGET_MS = 200_000;
+const MIN_TRY_MS = 5_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Busy errors are common on Gemini: retry each model with short waits (1 s, 2 s), then the fallback model. */
+/**
+ * Busy errors and timeouts are retried with short waits (1 s, 2 s). Any other error
+ * (for example a model this key cannot use) moves straight to the fallback model.
+ */
 async function generate(params: Omit<GenerateContentParameters, "model">) {
+  const deadline = Date.now() + BUDGET_MS;
   for (const model of [MODEL, FALLBACK_MODEL]) {
     for (let attempt = 0; attempt < TRIES_PER_MODEL; attempt++) {
+      const left = deadline - Date.now();
+      if (left < MIN_TRY_MS) throw new AiBusyError("Gemini ran out of time");
       try {
-        return await gemini().models.generateContent({ ...params, model });
+        return await gemini().models.generateContent({ ...params, model, config: { ...params.config, abortSignal: AbortSignal.timeout(left) } });
       } catch (e) {
-        if (!(e instanceof ApiError && BUSY_STATUS.has(e.status))) throw e;
+        if (e instanceof ApiError && !BUSY_STATUS.has(e.status)) {
+          console.error(`Gemini ${model} failed with ${e.status}, trying the next model`, e.message);
+          break;
+        }
         if (attempt < TRIES_PER_MODEL - 1) await sleep(1000 * 2 ** attempt);
       }
     }
   }
-  throw new AiBusyError("Gemini stayed busy on every try");
+  throw new AiBusyError("Gemini gave no answer on any model");
 }
 
 /** Asks for JSON matching the schema. Null if Gemini blocked it, stopped early, or the JSON does not match. Throws AiBusyError if Gemini stays busy. */

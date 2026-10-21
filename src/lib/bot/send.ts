@@ -3,10 +3,26 @@ import type { FamilyRow } from "@/lib/db/rows";
 import { addAlert, logMessage } from "@/lib/db/repo";
 import { type Button, OUTSIDE_WINDOW, WhatsAppError, sendButtons, sendTemplate, sendText } from "@/lib/whatsapp/client";
 import type { ChildLang, MealKey } from "@/lib/domain/types";
+import { pm } from "@/lib/i18n/parent";
+
+/** WhatsApp allows at most 1,024 characters in a message with buttons. */
+const BUTTON_BODY_MAX = 1024;
 
 /** Sends a message to the parent and records it for the child's Chat tab. */
 export async function toParent(family: FamilyRow, body: string, buttons: Button[] = []) {
-  const id = buttons.length ? await sendButtons(family.parent_phone, body, buttons) : await sendText(family.parent_phone, body);
+  let id: string | null;
+  if (!buttons.length) {
+    id = await sendText(family.parent_phone, body);
+  } else if (body.length <= BUTTON_BODY_MAX) {
+    id = await sendButtons(family.parent_phone, body, buttons);
+  } else {
+    // Too long for buttons: send the text, then the last paragraph (usually the footer) with the buttons.
+    const cut = body.lastIndexOf("\n\n");
+    const tail = cut > 0 ? body.slice(cut + 2) : "";
+    const fits = tail && tail.length <= BUTTON_BODY_MAX;
+    id = await sendText(family.parent_phone, fits ? body.slice(0, cut) : body);
+    await sendButtons(family.parent_phone, fits ? tail : pm(family.parent_lang, "help", { n: family.parent_call_name }), buttons);
+  }
   await logMessage(family.id, "out", body, null, id);
   return id;
 }

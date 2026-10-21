@@ -10,8 +10,16 @@ function must<T>(res: { data: T | null; error: { message: string } | null }): T 
   return res.data as T;
 }
 
+/** The family this number last linked to. Newest wins, so an old setup with the same number never breaks it. */
 export async function familyByParentPhone(phone: string): Promise<FamilyRow | null> {
-  const res = await admin().from("families").select("*").eq("parent_phone", phone).not("parent_linked_at", "is", null).maybeSingle();
+  const res = await admin()
+    .from("families")
+    .select("*")
+    .eq("parent_phone", phone)
+    .not("parent_linked_at", "is", null)
+    .order("parent_linked_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   return must(res) as FamilyRow | null;
 }
 
@@ -23,7 +31,9 @@ export async function linkedFamilies(): Promise<FamilyRow[]> {
   return must(await admin().from("families").select("*").not("parent_linked_at", "is", null)) as FamilyRow[];
 }
 
-export async function markLinked(familyId: string) {
+/** Links the parent's number to this family and unlinks it from any other family, so one number has one family. */
+export async function markLinked(familyId: string, parentPhone: string) {
+  must(await admin().from("families").update({ parent_linked_at: null }).eq("parent_phone", parentPhone).neq("id", familyId));
   must(await admin().from("families").update({ parent_linked_at: new Date().toISOString() }).eq("id", familyId));
 }
 

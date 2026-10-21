@@ -26,12 +26,12 @@ import { alertChild, toParent } from "./send";
 
 const v = (f: FamilyRow) => ({ n: f.parent_call_name, c: f.child_name, p: f.child_phone ?? "" });
 
-/** Runs an AI call. If Gemini stays busy, asks the parent to send again and returns null. */
+/** Runs an AI call. If it fails for any reason, asks the parent to send again (never silence) and returns null. */
 async function orBusy<T>(family: FamilyRow, call: () => Promise<T>): Promise<T | null> {
   try {
     return await call();
   } catch (e) {
-    if (!(e instanceof AiBusyError)) throw e;
+    if (!(e instanceof AiBusyError)) console.error("AI call failed", e);
     await toParent(family, pm(family.parent_lang, "busy", v(family)));
     return null;
   }
@@ -62,7 +62,7 @@ export async function handleIncoming(msg: Incoming) {
       await sendText(msg.from, pm(candidate.parent_lang, "wrongNumber"));
       return;
     }
-    await markLinked(candidate.id);
+    await markLinked(candidate.id, candidate.parent_phone);
     await touchParent(candidate.id);
     family = candidate;
     await toParent(family, pm(family.parent_lang, "welcome", v(family)));
@@ -118,9 +118,13 @@ export async function handleIncoming(msg: Incoming) {
 
 async function handleDocument(family: FamilyRow, mediaId: string, mimeType: string) {
   const lang = family.parent_lang;
-  const { bytes, mimeType: mime } = await downloadMedia(mediaId);
-  const photoPath = await uploadPhoto(family.id, bytes, mime || mimeType);
-  const result = await orBusy(family, () => readDocument(bytes, mime || mimeType));
+  const media = await orBusy(family, async () => {
+    const { bytes, mimeType: mime } = await downloadMedia(mediaId);
+    return { bytes, mime: mime || mimeType, photoPath: await uploadPhoto(family.id, bytes, mime || mimeType) };
+  });
+  if (!media) return;
+  const { bytes, mime, photoPath } = media;
+  const result = await orBusy(family, () => readDocument(bytes, mime));
   if (!result) return;
 
   if (result.type === "prescription") {
