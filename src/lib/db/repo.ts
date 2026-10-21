@@ -1,0 +1,163 @@
+import "server-only";
+import type { MealKey, Medicine, ReportValue } from "@/lib/domain/types";
+import { admin } from "./admin";
+import { type FamilyRow, type MedicineRow, type ReportValueRow, fromMedicine, toMedicine, toReportValue } from "./rows";
+
+/** Server-side data access for the webhook and scheduler (service role). */
+
+function must<T>(res: { data: T | null; error: { message: string } | null }): T {
+  if (res.error) throw new Error(res.error.message);
+  return res.data as T;
+}
+
+export async function familyByParentPhone(phone: string): Promise<FamilyRow | null> {
+  const res = await admin().from("families").select("*").eq("parent_phone", phone).not("parent_linked_at", "is", null).maybeSingle();
+  return must(res) as FamilyRow | null;
+}
+
+export async function familyByCode(code: string): Promise<FamilyRow | null> {
+  return must(await admin().from("families").select("*").eq("link_code", code).maybeSingle()) as FamilyRow | null;
+}
+
+export async function linkedFamilies(): Promise<FamilyRow[]> {
+  return must(await admin().from("families").select("*").not("parent_linked_at", "is", null)) as FamilyRow[];
+}
+
+export async function markLinked(familyId: string) {
+  must(await admin().from("families").update({ parent_linked_at: new Date().toISOString() }).eq("id", familyId));
+}
+
+export async function touchParent(familyId: string) {
+  must(await admin().from("families").update({ last_parent_message_at: new Date().toISOString() }).eq("id", familyId));
+}
+
+export async function activeMedicines(familyId: string): Promise<Medicine[]> {
+  const rows = must(await admin().from("medicines").select("*").eq("family_id", familyId).eq("active", true).order("created_at")) as MedicineRow[];
+  return rows.map(toMedicine);
+}
+
+export async function hasPendingPrescription(familyId: string): Promise<boolean> {
+  const res = await admin().from("prescriptions").select("id", { count: "exact", head: true }).eq("family_id", familyId).eq("status", "pending");
+  if (res.error) throw new Error(res.error.message);
+  return (res.count ?? 0) > 0;
+}
+
+export async function uploadPhoto(familyId: string, bytes: ArrayBuffer, mimeType: string): Promise<string> {
+  const ext = mimeType === "application/pdf" ? "pdf" : mimeType.split("/")[1] ?? "jpg";
+  const path = `${familyId}/${Date.now()}.${ext}`;
+  const res = await admin().storage.from("uploads").upload(path, bytes, { contentType: mimeType });
+  if (res.error) throw new Error(res.error.message);
+  return path;
+}
+
+export async function savePrescription(input: {
+  familyId: string;
+  source: "parent" | "child";
+  photoPath: string | null;
+  doctor: string | null;
+  date: string | null;
+  extracted: unknown;
+  medicines: Medicine[];
+}): Promise<string> {
+  const rx = must(
+    await admin()
+      .from("prescriptions")
+      .insert({ family_id: input.familyId, source: input.source, photo_path: input.photoPath, doctor: input.doctor, rx_date: input.date, extracted: input.extracted })
+      .select("id")
+      .single(),
+  ) as { id: string };
+  if (input.medicines.length) {
+    must(await admin().from("medicines").insert(input.medicines.map((m) => fromMedicine(input.familyId, rx.id, m))));
+  }
+  return rx.id;
+}
+
+/** Previous value of each test, from the most recent earlier report, keyed by lower-case test name. */
+export async function previousValues(familyId: string): Promise<Record<string, string>> {
+  const reports = must(await admin().from("reports").select("id").eq("family_id", familyId).order("created_at", { ascending: false }).limit(1)) as { id: string }[];
+  if (!reports.length) return {};
+  const rows = must(await admin().from("report_values").select("test,value_text").eq("report_id", reports[0].id)) as { test: string; value_text: string }[];
+  return Object.fromEntries(rows.map((r) => [r.test.toLowerCase(), r.value_text]));
+}
+
+export async function saveReport(input: { familyId: string; photoPath: string | null; lab: string | null; date: string | null; values: ReportValue[] }) {
+  const rep = must(
+    await admin().from("reports").insert({ family_id: input.familyId, photo_path: input.photoPath, lab: input.lab, report_date: input.date }).select("id").single(),
+  ) as { id: string };
+  if (input.values.length) {
+    must(
+      await admin()
+        .from("report_values")
+        .insert(
+          input.values.map((v) => ({
+            report_id: rep.id,
+            test: v.test,
+            value_text: v.valueText,
+            value_number: v.valueNumber,
+            unit: v.unit,
+            range_text: v.rangeText,
+            range_low: v.rangeLow,
+            range_high: v.rangeHigh,
+            flag: v.flag,
+            what_it_measures: v.whatItMeasures,
+          })),
+        ),
+    );
+  }
+  return rep.id;
+}
+
+export async function latestReportValues(familyId: string): Promise<ReportValue[]> {
+  const reports = must(await admin().from("reports").select("id").eq("family_id", familyId).order("created_at", { ascending: false }).limit(1)) as { id: string }[];
+  if (!reports.length) return [];
+  const rows = must(await admin().from("report_values").select("*").eq("report_id", reports[0].id)) as ReportValueRow[];
+  return rows.map(toReportValue);
+}
+
+export async function logMessage(familyId: string | null, direction: "in" | "out", body: string, waFrom: string | null, waMessageId: string | null) {
+  const res = await admin().from("messages").insert({ family_id: familyId, direction, body, wa_from: waFrom, wa_message_id: waMessageId });
+  // A duplicate incoming id means Meta retried a webhook we already handled.
+  if (res.error && res.error.code === "23505") return false;
+  if (res.error) throw new Error(res.error.message);
+  return true;
+}
+
+export async function addAlert(familyId: string, kind: string, severity: "check" | "urgent", detail: Record<string, unknown>, sentToWhatsapp: boolean) {
+  must(await admin().from("alerts").insert({ family_id: familyId, kind, severity, detail, sent_to_whatsapp: sentToWhatsapp }));
+}
+
+export async function mealsSentToday(familyId: string, date: string): Promise<Set<MealKey>> {
+  const rows = must(await admin().from("doses").select("meal").eq("family_id", familyId).eq("dose_date", date)) as { meal: MealKey }[];
+  return new Set(rows.map((r) => r.meal));
+}
+
+export async function recordReminder(familyId: string, date: string, meal: MealKey) {
+  must(await admin().from("doses").upsert({ family_id: familyId, dose_date: date, meal, status: "sent" }, { onConflict: "family_id,dose_date,meal", ignoreDuplicates: true }));
+}
+
+export async function markTaken(familyId: string, date: string, meal: MealKey): Promise<boolean> {
+  const rows = must(
+    await admin()
+      .from("doses")
+      .update({ status: "taken", taken_at: new Date().toISOString() })
+      .eq("family_id", familyId)
+      .eq("dose_date", date)
+      .eq("meal", meal)
+      .select("id"),
+  ) as { id: string }[];
+  return rows.length > 0;
+}
+
+export async function openDoses(): Promise<{ id: string; family_id: string; dose_date: string; meal: MealKey; sent_at: string }[]> {
+  return must(await admin().from("doses").select("id,family_id,dose_date,meal,sent_at").eq("status", "sent")) as {
+    id: string;
+    family_id: string;
+    dose_date: string;
+    meal: MealKey;
+    sent_at: string;
+  }[];
+}
+
+export async function markMissed(doseId: string) {
+  must(await admin().from("doses").update({ status: "missed" }).eq("id", doseId).eq("status", "sent"));
+}
