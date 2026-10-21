@@ -13,6 +13,7 @@ export type Incoming =
   | { kind: "text"; from: string; id: string; name: string | null; text: string }
   | { kind: "media"; from: string; id: string; name: string | null; mediaId: string; mimeType: string; caption: string | null }
   | { kind: "button"; from: string; id: string; name: string | null; buttonId: string; title: string }
+  | { kind: "voice"; from: string; id: string; name: string | null; mediaId: string; mimeType: string }
   | { kind: "other"; from: string; id: string; name: string | null; type: string };
 
 type WaMessage = {
@@ -22,6 +23,7 @@ type WaMessage = {
   text?: { body: string };
   image?: { id: string; mime_type: string; caption?: string };
   document?: { id: string; mime_type: string; caption?: string };
+  audio?: { id: string; mime_type: string; voice?: boolean };
   interactive?: { type: string; button_reply?: { id: string; title: string } };
   button?: { payload: string; text: string };
 };
@@ -42,6 +44,8 @@ export function parseWebhook(body: unknown): Incoming[] {
         } else if ((m.type === "image" || m.type === "document") && (m.image ?? m.document)) {
           const media = (m.image ?? m.document)!;
           out.push({ ...base, kind: "media", mediaId: media.id, mimeType: media.mime_type, caption: media.caption ?? null });
+        } else if (m.type === "audio" && m.audio) {
+          out.push({ ...base, kind: "voice", mediaId: m.audio.id, mimeType: m.audio.mime_type });
         } else if (m.type === "interactive" && m.interactive?.button_reply) {
           out.push({ ...base, kind: "button", buttonId: m.interactive.button_reply.id, title: m.interactive.button_reply.title });
         } else if (m.type === "button" && m.button) {

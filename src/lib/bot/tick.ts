@@ -1,14 +1,17 @@
 import "server-only";
-import { activeMedicines, linkedFamilies, markMissed, mealsSentToday, openDoses, recordReminder } from "@/lib/db/repo";
+import { activeMedicines, latestReportValues, linkedFamilies, markMissed, markVisitReminded, mealsSentToday, openDoses, recordReminder, visitsOn } from "@/lib/db/repo";
+import type { FamilyRow } from "@/lib/db/rows";
+import { shiftDate } from "@/lib/domain/adherence";
 import { mealTimes } from "@/lib/db/rows";
-import { dueReminders, isOverdue, istNow, medicinesFor } from "@/lib/domain/meals";
-import { mealName, pm, reminderLines } from "@/lib/i18n/parent";
-import { alertChild, reminderToParent } from "./send";
+import { MISSED_AFTER_MIN, dueReminders, isOverdue, istNow, medicinesFor, toMinutes } from "@/lib/domain/meals";
+import { doctorQuestions, mealName, pm, reminderLines, visitText } from "@/lib/i18n/parent";
+import { alertChild, reminderToParent, toParent, visitNoteToChild } from "./send";
 
 /**
  * Runs every few minutes (called by Supabase pg_cron):
  * 1. sends meal reminders that are due,
- * 2. marks reminders with no "Taken" after 60 minutes as not marked and alerts the child.
+ * 2. marks reminders with no "Taken" after 60 minutes as not marked and alerts the child,
+ * 3. sends doctor-visit reminders: the evening before (dinner time) and the morning of the visit (breakfast time).
  */
 export async function tick(now: Date = new Date()) {
   const { date } = istNow(now);
@@ -50,6 +53,14 @@ export async function tick(now: Date = new Date()) {
     }
   }
 
+  for (const family of families) {
+    try {
+      await visitReminders(family, now);
+    } catch (e) {
+      console.error(`Visit reminder failed for family ${family.id}`, e);
+    }
+  }
+
   for (const dose of await openDoses()) {
     if (!isOverdue(new Date(dose.sent_at), now)) continue;
     await markMissed(dose.id);
@@ -59,4 +70,29 @@ export async function tick(now: Date = new Date()) {
   }
 
   return { sent, missed };
+}
+
+/** True when "now" is inside the hour after this meal time, the same window meal reminders use. */
+function inMealWindow(mealTime: string, minutes: number): boolean {
+  const start = toMinutes(mealTime);
+  return minutes >= start && minutes < start + MISSED_AFTER_MIN;
+}
+
+async function visitReminders(family: FamilyRow, now: Date) {
+  const { date, minutes } = istNow(now);
+  const tomorrow = shiftDate(date, 1);
+  const lang = family.parent_lang;
+  const vars = { n: family.parent_call_name, c: family.child_name };
+  for (const visit of await visitsOn(family.id, [date, tomorrow])) {
+    if (visit.visit_date === tomorrow && !visit.evening_sent_at && inMealWindow(family.meal_d, minutes)) {
+      await toParent(family, visitText(lang, "visitEve", visit, vars));
+      await visitNoteToChild(family, visit);
+      await markVisitReminded(visit.id, "evening");
+    }
+    if (visit.visit_date === date && !visit.morning_sent_at && inMealWindow(family.meal_b, minutes)) {
+      const questions = doctorQuestions(lang, family.child_name, await latestReportValues(family.id));
+      await toParent(family, `${visitText(lang, "visitMorning", visit, vars)}\n\n${questions}`);
+      await markVisitReminded(visit.id, "morning");
+    }
+  }
 }

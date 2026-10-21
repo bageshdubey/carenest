@@ -1,15 +1,46 @@
 import "server-only";
 import type { FamilyRow } from "@/lib/db/rows";
 import { addAlert, logMessage } from "@/lib/db/repo";
-import { type Button, OUTSIDE_WINDOW, WhatsAppError, sendButtons, sendTemplate, sendText } from "@/lib/whatsapp/client";
+import { speak } from "@/lib/ai/gemini";
+import { VOICE_NOTE_MAX_BYTES, toVoiceNote } from "@/lib/audio";
+import { type Button, OUTSIDE_WINDOW, WhatsAppError, sendButtons, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
+import { formatTime } from "@/lib/domain/meals";
 import type { ChildLang, MealKey } from "@/lib/domain/types";
 import { pm } from "@/lib/i18n/parent";
 
 /** WhatsApp allows at most 1,024 characters in a message with buttons. */
 const BUTTON_BODY_MAX = 1024;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Sends a message to the parent and records it for the child's Chat tab. */
-export async function toParent(family: FamilyRow, body: string, buttons: Button[] = []) {
+/** WhatsApp lets us send free messages, voice included, only within 24 hours of the parent's last message. */
+function inWindow(family: FamilyRow): boolean {
+  return !!family.last_parent_message_at && Date.now() - new Date(family.last_parent_message_at).getTime() < DAY_MS;
+}
+
+/** What the voice reads: the same words, without list bullets. */
+function forSpeech(text: string): string {
+  return text.replace(/^\s*•\s*/gm, "").trim();
+}
+
+/** Speaks the text as a voice note. Never throws: if any step fails, the text message still goes. */
+async function sendVoiceNote(family: FamilyRow, text: string) {
+  try {
+    const speech = await speak(forSpeech(text));
+    if (!speech) return;
+    const note = await toVoiceNote(speech.data, speech.mimeType);
+    if (note.length > VOICE_NOTE_MAX_BYTES) return;
+    await sendVoice(family.parent_phone, note);
+  } catch (e) {
+    console.error("Voice note not sent", e);
+  }
+}
+
+/**
+ * Sends a message to the parent, voice note first and the text below it, and records the text
+ * for the child's Chat tab. `spoken` is what the voice reads (default: the whole text; null: no voice).
+ */
+export async function toParent(family: FamilyRow, body: string, buttons: Button[] = [], spoken: string | null = body) {
+  if (spoken && inWindow(family)) await sendVoiceNote(family, spoken);
   let id: string | null;
   if (!buttons.length) {
     id = await sendText(family.parent_phone, body);
@@ -104,4 +135,22 @@ export async function alertChild(
     }
   }
   await addAlert(family.id, kind, kind === "emergency" ? "urgent" : "check", { ...detail, text }, sent);
+}
+
+const CHILD_VISIT: Record<ChildLang, string> = {
+  en: "CareNest: {n}'s doctor visit is tomorrow, {d}{t}. {n} has been reminded.",
+  hi: "CareNest: {n} की डॉक्टर विज़िट कल है, {d}{t}। {n} को याद दिला दिया है।",
+};
+
+/** The evening before a visit, the child gets a copy of the parent's reminder. Best effort, never throws. */
+export async function visitNoteToChild(family: FamilyRow, visit: { visit_date: string; visit_time: string | null }) {
+  if (!family.child_phone) return;
+  const lang = family.child_lang;
+  const d = new Date(`${visit.visit_date}T00:00:00Z`).toLocaleDateString(lang === "hi" ? "hi-IN" : "en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+  const t = visit.visit_time ? `, ${formatTime(visit.visit_time)}` : "";
+  try {
+    await sendText(family.child_phone, CHILD_VISIT[lang].replaceAll("{n}", family.parent_call_name).replace("{d}", d).replace("{t}", t));
+  } catch (e) {
+    console.error("Visit note to child not delivered", e);
+  }
 }

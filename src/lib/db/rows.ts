@@ -18,6 +18,19 @@ export type FamilyRow = {
   created_at: string;
 };
 
+export type VisitRow = {
+  id: string;
+  family_id: string;
+  visit_date: string;
+  visit_time: string | null;
+  doctor: string | null;
+  source: "child" | "photo";
+  status: "pending" | "confirmed";
+  evening_sent_at: string | null;
+  morning_sent_at: string | null;
+  created_at: string;
+};
+
 export type MedicineRow = {
   id: string;
   family_id: string;

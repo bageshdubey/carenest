@@ -69,7 +69,29 @@ export function sendTemplate(to: string, name: string, languageCode: string, bod
   });
 }
 
-/** Downloads a photo or PDF the user sent. */
+/** Uploads a file to WhatsApp and returns its media id, for sending as a message. */
+async function uploadMedia(bytes: Buffer, mimeType: string, filename: string): Promise<string> {
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", mimeType);
+  form.append("file", new Blob([new Uint8Array(bytes)], { type: mimeType }), filename);
+  const res = await fetch(`${GRAPH}/${env("WHATSAPP_PHONE_NUMBER_ID")}/media`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env("WHATSAPP_TOKEN")}` },
+    body: form,
+  });
+  const json = (await res.json()) as { id?: string; error?: { message: string; code: number } };
+  if (!res.ok || !json.id) throw new WhatsAppError(json.error?.message ?? `Media upload failed: HTTP ${res.status}`, json.error?.code ?? null);
+  return json.id;
+}
+
+/** Sends an OGG/Opus file as a voice note (play button, no download). */
+export async function sendVoice(to: string, ogg: Buffer) {
+  const id = await uploadMedia(ogg, "audio/ogg", "carenest.ogg");
+  return post({ to, type: "audio", audio: { id, voice: true } });
+}
+
+/** Downloads a photo, PDF or voice note the user sent. */
 export async function downloadMedia(mediaId: string): Promise<{ bytes: ArrayBuffer; mimeType: string }> {
   const auth = { Authorization: `Bearer ${env("WHATSAPP_TOKEN")}` };
   const meta = (await (await fetch(`${GRAPH}/${mediaId}`, { headers: auth })).json()) as { url?: string; mime_type?: string };

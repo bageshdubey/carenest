@@ -4,11 +4,12 @@ import { dismissAlert } from "@/app/actions";
 import { Card, CardHead, FlagPill, MonthGrid, Pill, RangeBar, Ring, WeekBars } from "@/components/app/dashboard";
 import { CopyButton } from "@/components/app/copy-button";
 import { SettingsForm } from "@/components/app/settings-form";
+import { VisitCard } from "@/components/app/visit-card";
 import { buttonVariants } from "@/components/ui/button";
 import { type DoseRow, lastDays, monthToDate, shiftDate, totals } from "@/lib/domain/adherence";
 import { formatTime, istNow } from "@/lib/domain/meals";
 import { type MealKey, MEALS, type Medicine, type ReportValue } from "@/lib/domain/types";
-import { type MedicineRow, type ReportValueRow, mealTimes, toMedicine, toReportValue } from "@/lib/db/rows";
+import { type MedicineRow, type ReportValueRow, type VisitRow, mealTimes, toMedicine, toReportValue } from "@/lib/db/rows";
 import { CHILD_FOOD, CHILD_MEALS, makeT } from "@/lib/i18n/child";
 import { requireFamily } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
@@ -53,13 +54,14 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const t = makeT(lang, { n: family.parent_call_name });
   const { date: today } = istNow();
 
-  const [medsRes, pendingRes, dosesRes, reportsRes, msgsRes, alertsRes] = await Promise.all([
+  const [medsRes, pendingRes, dosesRes, reportsRes, msgsRes, alertsRes, visitsRes] = await Promise.all([
     supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true).order("created_at"),
     supabase.from("prescriptions").select("id", { count: "exact", head: true }).eq("family_id", family.id).eq("status", "pending"),
     supabase.from("doses").select("dose_date,meal,status").eq("family_id", family.id).gte("dose_date", shiftDate(today, -35)),
     supabase.from("reports").select("id,lab,report_date,created_at,report_values(*)").eq("family_id", family.id).order("created_at", { ascending: false }).limit(5),
     supabase.from("messages").select("id,direction,body,created_at").eq("family_id", family.id).order("created_at", { ascending: false }).limit(60),
     supabase.from("alerts").select("*").eq("family_id", family.id).order("created_at", { ascending: false }).limit(30),
+    supabase.from("visits").select("*").eq("family_id", family.id).gte("visit_date", today).order("visit_date"),
   ]);
 
   const meds: Medicine[] = ((medsRes.data ?? []) as MedicineRow[]).map(toMedicine);
@@ -71,6 +73,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   }));
   const messages = ((msgsRes.data ?? []) as Message[]).reverse();
   const alerts = (alertsRes.data ?? []) as Alert[];
+  const visits = (visitsRes.data ?? []) as VisitRow[];
   const times = mealTimes(family);
   const mealsWithMeds = MEALS.filter((k) => meds.some((m) => m.meals.includes(k)));
   const todayDoses = doses.filter((d) => d.dose_date === today);
@@ -170,6 +173,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                 <Adherence doses={doses} today={today} range={range} t={t} />
               </>
             )}
+
+            <VisitCard visits={visits} today={today} lang={lang} t={t} />
 
             {reports[0] && (
               <>

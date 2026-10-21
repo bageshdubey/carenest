@@ -1,7 +1,7 @@
 import "server-only";
 import type { MealKey, Medicine, ReportValue } from "@/lib/domain/types";
 import { admin } from "./admin";
-import { type FamilyRow, type MedicineRow, type ReportValueRow, fromMedicine, toMedicine, toReportValue } from "./rows";
+import { type FamilyRow, type MedicineRow, type ReportValueRow, type VisitRow, fromMedicine, toMedicine, toReportValue } from "./rows";
 
 /** Server-side data access for the webhook and scheduler (service role). */
 
@@ -130,6 +130,34 @@ export async function logMessage(familyId: string | null, direction: "in" | "out
   if (res.error && res.error.code === "23505") return false;
   if (res.error) throw new Error(res.error.message);
   return true;
+}
+
+/** After a voice note is understood, the Chat tab shows what was said instead of "[Voice]". */
+export async function setMessageBody(waMessageId: string, body: string) {
+  must(await admin().from("messages").update({ body }).eq("wa_message_id", waMessageId).eq("direction", "in"));
+}
+
+/** The next confirmed visit from today on, or null. */
+export async function nextVisit(familyId: string, today: string): Promise<VisitRow | null> {
+  return must(
+    await admin().from("visits").select("*").eq("family_id", familyId).eq("status", "confirmed").gte("visit_date", today).order("visit_date").limit(1).maybeSingle(),
+  ) as VisitRow | null;
+}
+
+/** Confirmed visits on these dates, for the scheduler's reminders. */
+export async function visitsOn(familyId: string, dates: string[]): Promise<VisitRow[]> {
+  return must(await admin().from("visits").select("*").eq("family_id", familyId).eq("status", "confirmed").in("visit_date", dates)) as VisitRow[];
+}
+
+export async function markVisitReminded(visitId: string, which: "evening" | "morning") {
+  must(await admin().from("visits").update({ [`${which}_sent_at`]: new Date().toISOString() }).eq("id", visitId));
+}
+
+/** A follow-up date read from a photo. It waits for the child's check; the same date is not added twice. */
+export async function addPhotoVisit(familyId: string, date: string, time: string | null) {
+  const existing = must(await admin().from("visits").select("id").eq("family_id", familyId).eq("visit_date", date)) as { id: string }[];
+  if (existing.length) return;
+  must(await admin().from("visits").insert({ family_id: familyId, visit_date: date, visit_time: time, source: "photo", status: "pending" }));
 }
 
 /** "Got it" on the dashboard. Only touches alerts of this family. */

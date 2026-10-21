@@ -6,7 +6,7 @@ import { readDocument } from "@/lib/ai/gemini";
 import { toParent } from "@/lib/bot/send";
 import { markAlertSeen, markNewListSeen, savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { toMedicine } from "@/lib/db/rows";
-import { mealsInOrder } from "@/lib/domain/meals";
+import { istNow, mealsInOrder } from "@/lib/domain/meals";
 import { makeLinkCode, normalisePhone } from "@/lib/domain/safety";
 import type { ChildLang, Food, MealKey, Medicine, ParentLang } from "@/lib/domain/types";
 import { listText, pm } from "@/lib/i18n/parent";
@@ -206,4 +206,41 @@ export async function signOut() {
   const supabase = await supabaseServer();
   await supabase.auth.signOut();
   redirect("/");
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The child adds or changes the next visit. One upcoming visit per family: later ones are replaced. */
+export async function saveVisit(formData: FormData) {
+  const { supabase, family } = await requireFamily();
+  const today = istNow().date;
+  const date = String(formData.get("date") ?? "");
+  const time = String(formData.get("time") ?? "");
+  const doctor = String(formData.get("doctor") ?? "").trim().slice(0, 80);
+  if (!ISO_DATE.test(date) || date < today) return;
+  await supabase.from("visits").delete().eq("family_id", family.id).gte("visit_date", today);
+  await supabase.from("visits").insert({
+    family_id: family.id,
+    visit_date: date,
+    visit_time: TIME.test(time) ? time : null,
+    doctor: doctor || null,
+    source: "child",
+    status: "confirmed",
+  });
+  revalidatePath("/home");
+}
+
+/** The child confirms a date found on a photo. It replaces any other upcoming visit. */
+export async function confirmVisit(formData: FormData) {
+  const { supabase, family } = await requireFamily();
+  const id = String(formData.get("id") ?? "");
+  await supabase.from("visits").delete().eq("family_id", family.id).gte("visit_date", istNow().date).neq("id", id);
+  await supabase.from("visits").update({ status: "confirmed" }).eq("family_id", family.id).eq("id", id);
+  revalidatePath("/home");
+}
+
+export async function removeVisit(formData: FormData) {
+  const { supabase, family } = await requireFamily();
+  await supabase.from("visits").delete().eq("family_id", family.id).eq("id", String(formData.get("id") ?? ""));
+  revalidatePath("/home");
 }

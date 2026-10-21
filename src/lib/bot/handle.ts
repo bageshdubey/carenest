@@ -1,7 +1,8 @@
 import "server-only";
-import { AiBusyError, answerQuestion, readDocument } from "@/lib/ai/gemini";
+import { AiBusyError, type Understood, readDocument, understand } from "@/lib/ai/gemini";
 import {
   activeMedicines,
+  addPhotoVisit,
   familyByCode,
   familyByParentPhone,
   hasPendingPrescription,
@@ -9,17 +10,20 @@ import {
   logMessage,
   markLinked,
   markTaken,
+  nextVisit,
   previousValues,
   savePrescription,
   saveReport,
+  setMessageBody,
   touchParent,
   uploadPhoto,
 } from "@/lib/db/repo";
 import type { FamilyRow } from "@/lib/db/rows";
 import { isOutOfRange } from "@/lib/domain/report";
 import { findLinkCode, isEmergency } from "@/lib/domain/safety";
+import { istNow } from "@/lib/domain/meals";
 import type { MealKey } from "@/lib/domain/types";
-import { doctorQuestions, listText, pm, reportText } from "@/lib/i18n/parent";
+import { doctorQuestions, listText, mealName, pm, reminderLines, reportText, visitText } from "@/lib/i18n/parent";
 import { downloadMedia, sendText } from "@/lib/whatsapp/client";
 import type { Incoming } from "@/lib/whatsapp/webhook";
 import { alertChild, toParent } from "./send";
@@ -32,7 +36,7 @@ async function orBusy<T>(family: FamilyRow, call: () => Promise<T>): Promise<T |
     return await call();
   } catch (e) {
     if (!(e instanceof AiBusyError)) console.error("AI call failed", e);
-    await toParent(family, pm(family.parent_lang, "busy", v(family)));
+    await toParent(family, pm(family.parent_lang, "busy", v(family)), [], null);
     return null;
   }
 }
@@ -64,7 +68,7 @@ export async function handleIncoming(msg: Incoming) {
     }
     await markLinked(candidate.id, candidate.parent_phone);
     await touchParent(candidate.id);
-    family = candidate;
+    family = { ...candidate, last_parent_message_at: new Date().toISOString() };
     await toParent(family, pm(family.parent_lang, "welcome", v(family)));
     const meds = await activeMedicines(family.id);
     if (meds.length) {
@@ -76,6 +80,7 @@ export async function handleIncoming(msg: Incoming) {
   const isNew = await logMessage(family.id, "in", describe(msg), msg.from, msg.id);
   if (!isNew) return;
   await touchParent(family.id);
+  family = { ...family, last_parent_message_at: new Date().toISOString() };
   const lang = family.parent_lang;
 
   if (msg.kind === "media") return handleDocument(family, msg.mediaId, msg.mimeType);
@@ -84,36 +89,89 @@ export async function handleIncoming(msg: Incoming) {
 
   if (msg.kind === "text") {
     const text = msg.text.trim();
-    if (isEmergency(text)) {
-      await toParent(family, pm(lang, "emergency", v(family)));
-      await alertChild(family, "emergency", { q: text });
-      return;
-    }
+    if (isEmergency(text)) return emergency(family, text);
     if (findLinkCode(text)) {
       await toParent(family, pm(lang, "help", v(family)), menu(family));
       return;
     }
     const meds = await activeMedicines(family.id);
-    if (!meds.length) {
-      const pending = await hasPendingPrescription(family.id);
-      await toParent(family, pm(lang, pending ? "waiting" : "noList", v(family)));
-      return;
-    }
-    const reply = await orBusy(family, () => answerQuestion(text, meds, lang));
-    if (!reply) return;
-    const { intent, answer } = reply;
-    if (intent === "about_my_medicines" && answer) {
-      await toParent(family, `${answer}\n\n${pm(lang, "footer")}`, menu(family));
-    } else if (intent === "advice") {
-      await toParent(family, pm(lang, "fixed", v(family)));
-      await alertChild(family, "advice_question", { q: text });
-    } else {
-      await toParent(family, pm(lang, "help", v(family)), menu(family));
-    }
+    const understood = await orBusy(family, () => understand({ text }, meds, lang));
+    if (understood) await reply(family, understood, false);
+    return;
+  }
+
+  if (msg.kind === "voice") {
+    const meds = await activeMedicines(family.id);
+    const understood = await orBusy(family, async () => {
+      const { bytes, mimeType } = await downloadMedia(msg.mediaId);
+      return understand({ audio: bytes, mimeType: mimeType || msg.mimeType }, meds, lang);
+    });
+    if (!understood) return;
+    await setMessageBody(msg.id, understood.heard ? `[Voice] ${understood.heard}` : "[Voice]");
+    // Emergency words are checked in code on what was said, before any other reply.
+    if (understood.heard && isEmergency(understood.heard)) return emergency(family, understood.heard);
+    await reply(family, understood, true);
     return;
   }
 
   await toParent(family, pm(lang, "help", v(family)), menu(family));
+}
+
+async function emergency(family: FamilyRow, said: string) {
+  await toParent(family, pm(family.parent_lang, "emergency", v(family)));
+  await alertChild(family, "emergency", { q: said });
+}
+
+/**
+ * Answers a typed or spoken message from the parent's own data. Gemini only picked the kind of
+ * question; the reply text is built here, so it never goes beyond the list, the report and the visit.
+ * A voice question gets "You asked: …" above the text so a mishearing is visible; the voice reads only the answer.
+ */
+async function reply(family: FamilyRow, u: Understood, fromVoice: boolean) {
+  const lang = family.parent_lang;
+  const vars = v(family);
+  const send = (answer: string, buttons = menu(family)) =>
+    toParent(family, fromVoice && u.heard ? `${pm(lang, "youAsked", { q: u.heard })}\n\n${answer}` : answer, buttons, answer);
+
+  if (u.intent === "advice") {
+    await send(pm(lang, "fixed", vars), []);
+    await alertChild(family, "advice_question", { q: u.heard });
+    return;
+  }
+  if (u.intent === "next_visit") {
+    const visit = await nextVisit(family.id, istNow().date);
+    await send(visit ? visitText(lang, "visitNext", visit, vars) : pm(lang, "visitNone", vars));
+    return;
+  }
+  if (u.intent === "report") {
+    const values = await latestReportValues(family.id);
+    await send(values.length ? reportText(lang, family.parent_call_name, values, {}) : pm(lang, "noReport", vars), [{ id: "doc", title: pm(lang, "q_doc") }]);
+    return;
+  }
+  if (u.intent === "greeting" || u.intent === "other") {
+    await send(pm(lang, "help", vars));
+    return;
+  }
+
+  // Everything left is about the medicine list.
+  const meds = await activeMedicines(family.id);
+  if (!meds.length) {
+    const pending = await hasPendingPrescription(family.id);
+    await send(pm(lang, pending ? "waiting" : "noList", vars), []);
+    return;
+  }
+  const footer = pm(lang, "footer");
+  if (u.intent === "meds_for_meal" && u.meal) {
+    const lines = reminderLines(lang, u.meal, meds);
+    const meal = mealName(lang, u.meal);
+    await send(lines ? `${pm(lang, "mealMeds", { ...vars, meal, lines })}\n\n${footer}` : pm(lang, "noMealMeds", { ...vars, meal }));
+  } else if (u.intent === "meds_count") {
+    await send(`${pm(lang, "medCount", { ...vars, k: String(meds.length), names: meds.map((m) => m.name.trim()).join(", ") })}\n\n${footer}`);
+  } else if (u.intent === "about_my_medicines" && u.answer) {
+    await send(`${u.answer}\n\n${footer}`);
+  } else {
+    await send(`${listText(lang, meds)}\n\n${footer}`);
+  }
 }
 
 async function handleDocument(family: FamilyRow, mediaId: string, mimeType: string) {
@@ -126,6 +184,15 @@ async function handleDocument(family: FamilyRow, mediaId: string, mimeType: stri
   const { bytes, mime, photoPath } = media;
   const result = await orBusy(family, () => readDocument(bytes, mime));
   if (!result) return;
+
+  // A follow-up date on the photo becomes a visit waiting for the child's check.
+  if ((result.type === "prescription" || result.type === "lab_report") && result.followUp) {
+    try {
+      await addPhotoVisit(family.id, result.followUp.date, result.followUp.time);
+    } catch (e) {
+      console.error("Could not save the follow-up date", e);
+    }
+  }
 
   if (result.type === "prescription") {
     await savePrescription({
@@ -181,6 +248,8 @@ function describe(msg: Incoming): string {
       return msg.text;
     case "media":
       return msg.mimeType === "application/pdf" ? "[PDF]" : "[Photo]";
+    case "voice":
+      return "[Voice]";
     case "button":
       return msg.title;
     default:

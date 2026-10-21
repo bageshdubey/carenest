@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { tick } from "@/lib/bot/tick";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function authorised(header: string | null): boolean {
   const secret = process.env.CRON_SECRET;

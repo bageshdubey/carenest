@@ -1,6 +1,6 @@
 import type { Food, MealKey, Medicine, ParentLang, ReportValue } from "@/lib/domain/types";
 import { MEALS, type MealKey as MK } from "@/lib/domain/types";
-import { medicinesFor } from "@/lib/domain/meals";
+import { formatTime, medicinesFor } from "@/lib/domain/meals";
 
 /**
  * Every WhatsApp message the parent receives. Fixed text only: the AI never
@@ -40,7 +40,7 @@ const MSG = {
     notADoc: "I couldn't find a prescription or a report in this photo, {n}. Please send a clear photo of the full page.",
     unclearPhoto: "This photo is hard to read, {n}. Please take it again in good light, with the whole page in the photo.",
     busy: "I'm a little busy right now, {n}. Please send it again in a minute.",
-    help: "{n}, you can send me a photo of a prescription or a report, or tap a button below.",
+    help: "{n}, you can send me a photo of a prescription or a report, ask me about your medicines by voice note, or tap a button below.",
     noList: "I don't have your list yet, {n}. Send me a photo of your prescription.",
     waiting: "{c} is still checking your list, {n}. Until then, follow your paper prescription.",
     unknownNumber:
@@ -50,6 +50,16 @@ const MSG = {
     q_taken: "Taken",
     q_list: "My full list",
     q_doc: "Questions for doctor",
+    youAsked: 'You asked: "{q}"',
+    mealMeds: "{n}, at {meal} you take:\n{lines}",
+    noMealMeds: "{n}, you have no medicines at {meal}.",
+    medCount: "{n}, you have {k} medicines on your list: {names}.",
+    noReport: "I don't have a report yet, {n}. Send me a photo of it.",
+    visitNext: "{n}, your next doctor visit is on {d}{t}.",
+    visitNone: "I don't have your next visit date, {n}. Please check your prescription or ask {c}.",
+    visitEve: "{n}, tomorrow ({d}) is your doctor visit{t}. Keep your prescriptions and reports ready.",
+    visitMorning: "{n}, today is your doctor visit{t}. Take your prescriptions and reports with you.",
+    timeAt: " at {t}",
   },
   hi: {
     welcome:
@@ -81,7 +91,7 @@ const MSG = {
     notADoc: "{n}, इस फ़ोटो में मुझे पर्चा या रिपोर्ट नहीं मिली। कृपया पूरे पन्ने की साफ़ फ़ोटो भेजें।",
     unclearPhoto: "{n}, यह फ़ोटो पढ़ना मुश्किल है। कृपया अच्छी रोशनी में पूरे पन्ने की फ़ोटो फिर से लें।",
     busy: "{n}, मैं अभी थोड़ा व्यस्त हूँ। कृपया एक मिनट बाद फिर से भेजें।",
-    help: "{n}, आप मुझे पर्चे या रिपोर्ट की फ़ोटो भेज सकते हैं, या नीचे कोई बटन दबाएँ।",
+    help: "{n}, आप मुझे पर्चे या रिपोर्ट की फ़ोटो भेज सकते हैं, अपनी दवाओं के बारे में बोलकर (वॉइस नोट) पूछ सकते हैं, या नीचे कोई बटन दबाएँ।",
     noList: "{n}, मेरे पास अभी आपकी सूची नहीं है। अपने पर्चे की फ़ोटो भेजिए।",
     waiting: "{n}, {c} अभी आपकी सूची जाँच रहे हैं। तब तक अपने कागज़ वाले पर्चे के हिसाब से ही दवा लें।",
     unknownNumber:
@@ -90,6 +100,16 @@ const MSG = {
     q_taken: "ले ली",
     q_list: "मेरी पूरी सूची",
     q_doc: "डॉक्टर के लिए सवाल",
+    youAsked: 'आपने पूछा: "{q}"',
+    mealMeds: "{n}, {meal} के समय आपकी दवाएँ:\n{lines}",
+    noMealMeds: "{n}, {meal} के समय आपकी कोई दवा नहीं है।",
+    medCount: "{n}, आपकी सूची में {k} दवाएँ हैं: {names}।",
+    noReport: "{n}, मेरे पास अभी कोई रिपोर्ट नहीं है। उसकी फ़ोटो भेजिए।",
+    visitNext: "{n}, आपकी अगली डॉक्टर विज़िट {d} को है{t}।",
+    visitNone: "{n}, मेरे पास आपकी अगली विज़िट की तारीख़ नहीं है। कृपया पर्चा देखें या {c} से पूछें।",
+    visitEve: "{n}, कल ({d}) आपकी डॉक्टर विज़िट है{t}। अपने पर्चे और रिपोर्ट तैयार रखें।",
+    visitMorning: "{n}, आज आपकी डॉक्टर विज़िट है{t}। अपने पर्चे और रिपोर्ट साथ ले जाएँ।",
+    timeAt: ", समय {t}",
   },
   mr: {
     welcome:
@@ -121,7 +141,7 @@ const MSG = {
     notADoc: "{n}, या फोटोमध्ये मला प्रिस्क्रिप्शन किंवा रिपोर्ट सापडला नाही. कृपया संपूर्ण पानाचा स्पष्ट फोटो पाठवा.",
     unclearPhoto: "{n}, हा फोटो वाचायला कठीण आहे. कृपया चांगल्या प्रकाशात संपूर्ण पानाचा फोटो पुन्हा काढा.",
     busy: "{n}, मी आत्ता थोडा व्यस्त आहे. कृपया एका मिनिटाने पुन्हा पाठवा.",
-    help: "{n}, तुम्ही मला प्रिस्क्रिप्शन किंवा रिपोर्टचा फोटो पाठवू शकता, किंवा खालील बटण दाबा.",
+    help: "{n}, तुम्ही मला प्रिस्क्रिप्शन किंवा रिपोर्टचा फोटो पाठवू शकता, तुमच्या औषधांबद्दल बोलून (व्हॉइस नोट) विचारू शकता, किंवा खालील बटण दाबा.",
     noList: "{n}, माझ्याकडे अजून तुमची यादी नाही. तुमच्या प्रिस्क्रिप्शनचा फोटो पाठवा.",
     waiting: "{n}, {c} अजून तुमची यादी तपासत आहेत. तोपर्यंत तुमच्या कागदी प्रिस्क्रिप्शनप्रमाणेच औषध घ्या.",
     unknownNumber:
@@ -130,6 +150,16 @@ const MSG = {
     q_taken: "घेतली",
     q_list: "माझी पूर्ण यादी",
     q_doc: "डॉक्टरांसाठी प्रश्न",
+    youAsked: 'तुम्ही विचारले: "{q}"',
+    mealMeds: "{n}, {meal}च्या वेळी तुमची औषधे:\n{lines}",
+    noMealMeds: "{n}, {meal}च्या वेळी तुमचे कोणतेही औषध नाही.",
+    medCount: "{n}, तुमच्या यादीत {k} औषधे आहेत: {names}.",
+    noReport: "{n}, माझ्याकडे अजून कोणताही रिपोर्ट नाही. त्याचा फोटो पाठवा.",
+    visitNext: "{n}, तुमची पुढची डॉक्टर भेट {d} रोजी आहे{t}.",
+    visitNone: "{n}, माझ्याकडे तुमच्या पुढच्या भेटीची तारीख नाही. कृपया प्रिस्क्रिप्शन पाहा किंवा {c} यांना विचारा.",
+    visitEve: "{n}, उद्या ({d}) तुमची डॉक्टर भेट आहे{t}. तुमची प्रिस्क्रिप्शन आणि रिपोर्ट तयार ठेवा.",
+    visitMorning: "{n}, आज तुमची डॉक्टर भेट आहे{t}. तुमची प्रिस्क्रिप्शन आणि रिपोर्ट सोबत घ्या.",
+    timeAt: ", वेळ {t}",
   },
 } as const;
 
@@ -159,6 +189,18 @@ export function fill(template: string, vars: Vars): string {
 
 export function pm(lang: ParentLang, key: ParentMsgKey, vars: Vars = {}): string {
   return fill(MSG[lang][key], vars);
+}
+
+/** "Tuesday, 4 November" in the parent's language. */
+export function visitDate(lang: ParentLang, isoDate: string): string {
+  const locale = { en: "en-IN", hi: "hi-IN", mr: "mr-IN" }[lang];
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+}
+
+/** The visit line for the parent: date, then time if known. */
+export function visitText(lang: ParentLang, key: "visitNext" | "visitEve" | "visitMorning", visit: { visit_date: string; visit_time: string | null }, vars: Vars): string {
+  const t = visit.visit_time ? fill(MSG[lang].timeAt, { t: formatTime(visit.visit_time) }) : "";
+  return fill(MSG[lang][key], { ...vars, d: visitDate(lang, visit.visit_date), t });
 }
 
 export function mealName(lang: ParentLang, meal: MealKey): string {

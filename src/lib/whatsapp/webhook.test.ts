@@ -42,6 +42,11 @@ describe("webhook", () => {
     expect(parsed[2]).toMatchObject({ buttonId: "taken:2026-10-21:l" });
   });
 
+  it("parses a voice note", () => {
+    const [voice] = parseWebhook(payload([{ from: "919876543210", id: "m5", type: "audio", audio: { id: "media2", mime_type: "audio/ogg; codecs=opus", voice: true } }]));
+    expect(voice).toMatchObject({ kind: "voice", mediaId: "media2", mimeType: "audio/ogg; codecs=opus" });
+  });
+
   it("ignores delivery status updates", () => {
     expect(parseWebhook({ entry: [{ changes: [{ value: { statuses: [{ id: "x" }] } }] }] })).toEqual([]);
   });

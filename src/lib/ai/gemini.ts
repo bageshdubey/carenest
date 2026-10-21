@@ -1,5 +1,7 @@
 import { ApiError, FinishReason, GoogleGenAI, type GenerateContentParameters, type Part } from "@google/genai";
 import * as z from "zod/v4";
+import { shiftDate } from "@/lib/domain/adherence";
+import { istNow } from "@/lib/domain/meals";
 import { flagValue, parseRange } from "@/lib/domain/report";
 import type { Food, MealKey, Medicine, ParentLang, ReportValue } from "@/lib/domain/types";
 
@@ -21,20 +23,26 @@ function gemini(): GoogleGenAI {
 /** Thrown when Gemini gives no usable answer in time, so the bot can ask the parent to send again. */
 export class AiBusyError extends Error {}
 
+/** Speech for voice notes. Both tested with Hindi on 21 Oct 2026. */
+const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-lite-tts";
+const TTS_FALLBACK_MODEL = process.env.GEMINI_TTS_FALLBACK_MODEL || "gemini-3.8-flash-tts";
+const TTS_VOICE = process.env.GEMINI_TTS_VOICE || "Kore";
+
 const BUSY_STATUS = new Set([429, 500, 503]);
 const TRIES_PER_MODEL = 3;
-/** One photo can take 20 to 80 s on Gemini. The webhook may run 300 s; this leaves time to save and reply. */
-const BUDGET_MS = 200_000;
+/** One photo can take 20 to 80 s on Gemini. The webhook may run 300 s; this leaves time to speak, save and reply. */
+const BUDGET_MS = 150_000;
+const SPEECH_BUDGET_MS = 45_000;
 const MIN_TRY_MS = 5_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Busy errors and timeouts are retried with short waits (1 s, 2 s). Any other error
- * (for example a model this key cannot use) moves straight to the fallback model.
+ * (for example a model this key cannot use) moves straight to the next model.
  */
-async function generate(params: Omit<GenerateContentParameters, "model">) {
-  const deadline = Date.now() + BUDGET_MS;
-  for (const model of [MODEL, FALLBACK_MODEL]) {
+async function generate(params: Omit<GenerateContentParameters, "model">, models = [MODEL, FALLBACK_MODEL], budgetMs = BUDGET_MS) {
+  const deadline = Date.now() + budgetMs;
+  for (const model of models) {
     for (let attempt = 0; attempt < TRIES_PER_MODEL; attempt++) {
       const left = deadline - Date.now();
       if (left < MIN_TRY_MS) throw new AiBusyError("Gemini ran out of time");
@@ -115,11 +123,22 @@ const DocumentSchema = z.object({
       ),
     })
     .nullable(),
+  follow_up: z
+    .object({
+      date: z.string().nullable().describe("Next visit or review date if a date is written, as YYYY-MM-DD."),
+      after_days: z.number().nullable().describe('If it says to come back after some time, that time in days. "After 2 weeks" is 14.'),
+      time: z.string().nullable().describe('Visit time if written, as HH:MM in 24-hour time.'),
+    })
+    .nullable()
+    .describe("Only if the document itself says when to see the doctor again."),
 });
 
+/** A next-visit date found on a photo. It waits for the child's check before any reminder. */
+export type FollowUp = { date: string; time: string | null };
+
 export type ReadResult =
-  | { type: "prescription"; medicines: Medicine[]; doctor: string | null; date: string | null; raw: unknown }
-  | { type: "lab_report"; values: ReportValue[]; lab: string | null; date: string | null; raw: unknown }
+  | { type: "prescription"; medicines: Medicine[]; doctor: string | null; date: string | null; followUp: FollowUp | null; raw: unknown }
+  | { type: "lab_report"; values: ReportValue[]; lab: string | null; date: string | null; followUp: FollowUp | null; raw: unknown }
   | { type: "unreadable" }
   | { type: "other" };
 
@@ -127,7 +146,22 @@ const READ_SYSTEM = `You read photos of Indian prescriptions and lab reports for
 Copy what is written. Do not guess medicine names: if a name is hard to read, give your best reading and set unclear to true.
 Map timings: morning or 1-0-0 to morning, afternoon or 0-1-0 to afternoon, night, bedtime or 0-0-1 to night. "BD" means morning and night. "TDS" means morning, afternoon and night. "OD" means once a day; use morning unless the slip says otherwise.
 For lab reports, copy each test, its value and the reference range printed on the report. Never say whether a value is good or bad.
+If the document says when to come back (follow-up, review, next visit, "SOS" does not count), fill follow_up. Otherwise set it to null.
 Never add advice, diagnosis or instructions that are not on the document.`;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Turns a written follow-up into a future date, counting "after N days" from today. Past or unreadable dates are dropped. */
+function toFollowUp(f: { date: string | null; after_days: number | null; time: string | null } | null): FollowUp | null {
+  if (!f) return null;
+  const today = istNow().date;
+  let date: string | null = null;
+  if (f.date && ISO_DATE.test(f.date)) date = f.date;
+  else if (f.after_days && f.after_days > 0 && f.after_days <= 365) date = shiftDate(today, Math.round(f.after_days));
+  if (!date || date < today) return null;
+  return { date, time: f.time && HH_MM.test(f.time) ? f.time : null };
+}
 
 function toMeals(m: { morning: boolean; afternoon: boolean; night: boolean }): MealKey[] {
   const out: MealKey[] = [];
@@ -159,7 +193,7 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
         needsCheck: m.unclear || meals.length === 0 || m.food === "unknown",
       };
     });
-    return { type: "prescription", medicines, doctor: doc.prescription.doctor, date: doc.prescription.date, raw: doc };
+    return { type: "prescription", medicines, doctor: doc.prescription.doctor, date: doc.prescription.date, followUp: toFollowUp(doc.follow_up), raw: doc };
   }
 
   if (doc.document_type === "lab_report" && doc.lab_report) {
@@ -177,35 +211,79 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
         whatItMeasures: v.what_it_measures,
       };
     });
-    return { type: "lab_report", values, lab: doc.lab_report.lab, date: doc.lab_report.date, raw: doc };
+    return { type: "lab_report", values, lab: doc.lab_report.lab, date: doc.lab_report.date, followUp: toFollowUp(doc.follow_up), raw: doc };
   }
 
   return { type: "other" };
 }
 
-const AnswerSchema = z.object({
-  intent: z.enum(["about_my_medicines", "advice", "greeting", "other"]),
-  answer: z.string().nullable().describe("Only for about_my_medicines. Plain, short, in the requested language."),
+const UnderstandSchema = z.object({
+  heard: z
+    .string()
+    .describe("For a voice note: exactly what the person said, in the language and script they spoke (Devanagari for Hindi and Marathi). For a text message: copy it."),
+  intent: z.enum(["meds_for_meal", "meds_count", "full_list", "report", "next_visit", "about_my_medicines", "advice", "greeting", "other"]),
+  meal: z
+    .enum(["b", "l", "d"])
+    .nullable()
+    .describe("Only for meds_for_meal: b = morning or breakfast, l = afternoon or lunch, d = evening, night or dinner."),
+  answer: z.string().nullable().describe("Only for about_my_medicines: 1 to 3 short sentences in the reply language, from the list only."),
 });
 
-const ANSWER_SYSTEM = `You help an older person in India understand their own medicine list. You are not a doctor.
-Classify the message:
-- about_my_medicines: what a medicine on the list is for, when to take it, which meal, before or after food, what is on the list.
-- advice: anything asking whether to skip, stop, change, double, mix or replace a medicine, side effects, symptoms, substitutes or "is it safe".
+export type Intent = z.infer<typeof UnderstandSchema>["intent"];
+export type Understood = { heard: string; intent: Intent; meal: MealKey | null; answer: string | null };
+
+const UNDERSTAND_SYSTEM = `You help an older person in India with their own medicines, reports and doctor visits. You are an analyst, never a doctor.
+The person writes or speaks in Hindi, Marathi or English, often mixed. First write down what they said in "heard".
+Then pick one intent:
+- meds_for_meal: which medicines to take at one time of day ("what do I take in the morning", "dopahar ki dawai"). Set meal.
+- meds_count: how many medicines they have.
+- full_list: the whole medicine list.
+- report: what their blood or lab report shows.
+- next_visit: when their next doctor visit or appointment is.
+- about_my_medicines: what a medicine on the list is for, before or after food, or what a medicine on the list is.
+- advice: whether to skip, stop, change, double, mix or replace a medicine; side effects; symptoms or how they feel; substitutes; "is it safe"; what a report value means for their health.
 - greeting: hello, thanks, ok.
 - other: anything else.
-For about_my_medicines, answer in 1 to 3 short sentences using only the list provided. If the list does not have the answer, set intent to other.
+Only for about_my_medicines, write "answer" using only the list given. If the list does not have it, use intent other.
 Never give advice, a diagnosis or an opinion.`;
 
-export async function answerQuestion(
-  question: string,
+/** Strips codec details: WhatsApp sends "audio/ogg; codecs=opus", Gemini wants "audio/ogg". */
+function baseMime(mimeType: string): string {
+  return mimeType.split(";")[0].trim().toLowerCase();
+}
+
+/**
+ * Understands one message from the parent, typed or spoken. Gemini only classifies it
+ * (and answers simple questions about the list); every other reply is built in code from their own data.
+ */
+export async function understand(
+  input: { text: string } | { audio: ArrayBuffer; mimeType: string },
   meds: Medicine[],
   lang: ParentLang,
-): Promise<{ intent: z.infer<typeof AnswerSchema>["intent"]; answer: string | null }> {
+): Promise<Understood> {
   const list = meds.map((m) => ({ name: m.name, strength: m.strength, quantity: m.quantity, meals: m.meals, food: m.food, for: m.purpose?.en ?? null }));
   const langName = { en: "English", hi: "Hindi", mr: "Marathi" }[lang];
-  const result = await generateJson(AnswerSchema, ANSWER_SYSTEM, [
-    { text: `Medicine list (meals: b = breakfast, l = lunch, d = dinner):\n${JSON.stringify(list)}\n\nReply language: ${langName}\n\nMessage:\n${question}` },
-  ]);
-  return result ?? { intent: "other", answer: null };
+  const context: Part = {
+    text: `Medicine list (meals: b = breakfast, l = lunch, d = dinner):\n${JSON.stringify(list)}\n\nReply language: ${langName}\n\n${"text" in input ? `Message:\n${input.text}` : "The message is the voice note above."}`,
+  };
+  const parts: Part[] = "text" in input ? [context] : [{ inlineData: { mimeType: baseMime(input.mimeType), data: Buffer.from(input.audio).toString("base64") } }, context];
+  const result = await generateJson(UnderstandSchema, UNDERSTAND_SYSTEM, parts);
+  const heard = "text" in input ? input.text : (result?.heard ?? "").trim();
+  if (!result) return { heard, intent: "other", meal: null, answer: null };
+  return { heard, intent: result.intent, meal: result.meal, answer: result.answer };
+}
+
+/** Reads a reply aloud for a voice note. Returns raw audio (WAV or 16-bit PCM) and its type, or null if Gemini gave none. */
+export async function speak(text: string): Promise<{ data: Buffer; mimeType: string } | null> {
+  const response = await generate(
+    {
+      contents: [{ role: "user", parts: [{ text: `Read this aloud slowly and warmly, exactly as written:\n${text}` }] }],
+      config: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: TTS_VOICE } } } },
+    },
+    [TTS_MODEL, TTS_FALLBACK_MODEL],
+    SPEECH_BUDGET_MS,
+  );
+  const audio = response.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
+  if (!audio?.data) return null;
+  return { data: Buffer.from(audio.data, "base64"), mimeType: audio.mimeType ?? "audio/wav" };
 }
