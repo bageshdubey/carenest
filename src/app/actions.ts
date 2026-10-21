@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { readDocument } from "@/lib/ai/claude";
+import { readDocument } from "@/lib/ai/gemini";
 import { toParent } from "@/lib/bot/send";
 import { savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { toMedicine } from "@/lib/db/rows";

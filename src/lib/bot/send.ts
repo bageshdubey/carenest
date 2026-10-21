@@ -62,7 +62,7 @@ export async function alertChild(
   kind: AlertKind,
   detail: { q?: string; k?: number; meal?: MealKey } = {},
 ) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://carenest.vercel.app";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://carenestapp.vercel.app";
   const lang = family.child_lang;
   const text = ALERT_TEXT[lang][kind]
     .replace("{n}", family.parent_call_name)

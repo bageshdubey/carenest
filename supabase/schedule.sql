@@ -10,7 +10,7 @@ select cron.schedule(
   '*/5 * * * *',
   $$
   select net.http_post(
-    url := 'https://carenest.vercel.app/api/cron/tick',
+    url := 'https://carenestapp.vercel.app/api/cron/tick',
     headers := jsonb_build_object('Authorization', 'Bearer REPLACE_WITH_CRON_SECRET')
   );
   $$

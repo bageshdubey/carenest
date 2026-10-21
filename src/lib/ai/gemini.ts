@@ -1,20 +1,43 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { FinishReason, GoogleGenAI, type Part } from "@google/genai";
 import * as z from "zod/v4";
 import { flagValue, parseRange } from "@/lib/domain/report";
 import type { Food, MealKey, Medicine, ParentLang, ReportValue } from "@/lib/domain/types";
 
 /**
- * All Claude calls live here. The model only reads documents and answers from
+ * All Gemini calls live here. The model only reads documents and answers from
  * the parent's own approved list. It never gives advice: advice questions are
  * classified and answered with a fixed message in code.
  */
-const MODEL = "claude-opus-5-5";
-let _client: Anthropic | null = null;
+/** Can be changed in env without a code change. */
+const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+let _client: GoogleGenAI | null = null;
 /** Created on first use, so builds work without the API key set. */
-function claude(): Anthropic {
-  return (_client ??= new Anthropic());
+function gemini(): GoogleGenAI {
+  return (_client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }));
 }
+
+/** Asks for JSON matching the schema. Null if Gemini blocked it, stopped early, or the JSON does not match. */
+async function generateJson<T extends z.ZodType>(schema: T, systemInstruction: string, parts: Part[]): Promise<z.infer<T> | null> {
+  const jsonSchema: Record<string, unknown> = { ...z.toJSONSchema(schema) };
+  delete jsonSchema.$schema;
+  const response = await gemini().models.generateContent({
+    model: MODEL,
+    contents: [{ role: "user", parts }],
+    config: { systemInstruction, responseMimeType: "application/json", responseJsonSchema: jsonSchema },
+  });
+  if (response.promptFeedback?.blockReason) return null;
+  const finish = response.candidates?.[0]?.finishReason;
+  if (finish && finish !== FinishReason.STOP) return null;
+  if (!response.text) return null;
+  try {
+    const parsed = schema.safeParse(JSON.parse(response.text));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+const READABLE_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 
 const Tri = z.object({ en: z.string(), hi: z.string(), mr: z.string() });
 
@@ -81,25 +104,10 @@ function toMeals(m: { morning: boolean; afternoon: boolean; night: boolean }): M
 
 export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promise<ReadResult> {
   const data = Buffer.from(bytes).toString("base64");
-  const isPdf = mimeType === "application/pdf";
-  const media = isPdf
-    ? ({ type: "document", source: { type: "base64", media_type: "application/pdf", data } } as const)
-    : ({
-        type: "image",
-        source: { type: "base64", media_type: (["image/png", "image/webp", "image/gif"].includes(mimeType) ? mimeType : "image/jpeg") as "image/jpeg", data },
-      } as const);
+  const media: Part = { inlineData: { mimeType: READABLE_TYPES.includes(mimeType) ? mimeType : "image/jpeg", data } };
 
-  const response = await claude().messages.parse({
-    model: MODEL,
-    max_tokens: 16000,
-    system: READ_SYSTEM,
-    output_config: { effort: "medium", format: zodOutputFormat(DocumentSchema) },
-    messages: [{ role: "user", content: [media, { type: "text", text: "Read this document." }] }],
-  });
-
-  if (response.stop_reason === "refusal" || !response.parsed_output) return { type: "unreadable" };
-  const doc = response.parsed_output;
-  if (!doc.readable) return { type: "unreadable" };
+  const doc = await generateJson(DocumentSchema, READ_SYSTEM, [media, { text: "Read this document." }]);
+  if (!doc || !doc.readable) return { type: "unreadable" };
 
   if (doc.document_type === "prescription" && doc.prescription) {
     const medicines: Medicine[] = doc.prescription.medicines.map((m) => {
@@ -161,18 +169,8 @@ export async function answerQuestion(
 ): Promise<{ intent: z.infer<typeof AnswerSchema>["intent"]; answer: string | null }> {
   const list = meds.map((m) => ({ name: m.name, strength: m.strength, quantity: m.quantity, meals: m.meals, food: m.food, for: m.purpose?.en ?? null }));
   const langName = { en: "English", hi: "Hindi", mr: "Marathi" }[lang];
-  const response = await claude().messages.parse({
-    model: MODEL,
-    max_tokens: 4000,
-    system: ANSWER_SYSTEM,
-    output_config: { effort: "low", format: zodOutputFormat(AnswerSchema) },
-    messages: [
-      {
-        role: "user",
-        content: `Medicine list (meals: b = breakfast, l = lunch, d = dinner):\n${JSON.stringify(list)}\n\nReply language: ${langName}\n\nMessage:\n${question}`,
-      },
-    ],
-  });
-  if (response.stop_reason === "refusal" || !response.parsed_output) return { intent: "other", answer: null };
-  return response.parsed_output;
+  const result = await generateJson(AnswerSchema, ANSWER_SYSTEM, [
+    { text: `Medicine list (meals: b = breakfast, l = lunch, d = dinner):\n${JSON.stringify(list)}\n\nReply language: ${langName}\n\nMessage:\n${question}` },
+  ]);
+  return result ?? { intent: "other", answer: null };
 }

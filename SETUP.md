@@ -11,16 +11,16 @@ Steps to get CareNest running. Secrets go in `.env.local` (on your laptop) and i
 1. Google Cloud Console > APIs & Services > Credentials > Create OAuth client ID > Web application.
 2. Authorised redirect URI: the callback URL shown in Supabase > Authentication > Providers > Google.
 3. Paste the Client ID and Client Secret into that Supabase Google provider page and turn it on.
-4. Supabase > Authentication > URL Configuration: Site URL `http://localhost:3000` for now (later `https://carenest.vercel.app`), and add both to Redirect URLs as `.../auth/callback`.
+4. Supabase > Authentication > URL Configuration: Site URL `http://localhost:3000` for now (later `https://carenestapp.vercel.app`), and add both to Redirect URLs as `.../auth/callback`.
 
-## 3. Claude
-console.anthropic.com > API keys > create one > `ANTHROPIC_API_KEY` in `.env.local`.
+## 3. Gemini
+aistudio.google.com > Get API key > create one > `GEMINI_API_KEY` in `.env.local`. On the free tier Google may use what is sent to improve its products; use a key with billing on before real families test.
 
 ## 4. WhatsApp (Meta)
 1. Meta app > WhatsApp > API Setup: generate a token > `WHATSAPP_TOKEN`. (The test token lasts 24 hours.)
 2. App settings > Basic > App secret > `WHATSAPP_APP_SECRET`.
 3. Make up a long random `WHATSAPP_VERIFY_TOKEN`.
-4. After the app is live: WhatsApp > Configuration > Webhook: URL `https://carenest.vercel.app/api/whatsapp`, verify token = the one above, subscribe to `messages`.
+4. After the app is live: WhatsApp > Configuration > Webhook: URL `https://carenestapp.vercel.app/api/whatsapp`, verify token = the one above, subscribe to `messages`.
 5. Add the parent's and the child's numbers to the test number's recipient list (5 numbers max).
 
 ## 5. Run locally

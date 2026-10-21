@@ -1,5 +1,5 @@
 import "server-only";
-import { answerQuestion, readDocument } from "@/lib/ai/claude";
+import { answerQuestion, readDocument } from "@/lib/ai/gemini";
 import {
   activeMedicines,
   familyByCode,
