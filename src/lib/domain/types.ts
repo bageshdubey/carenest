@@ -18,7 +18,7 @@ export type Medicine = {
   meals: MealKey[];
   food: Food;
   purpose: Purpose | null;
-  purposeSource: "prescription" | "suggested" | "none";
+  purposeSource: "prescription" | "suggested" | "child" | "none";
   needsCheck: boolean;
 };
 

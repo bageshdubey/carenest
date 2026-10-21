@@ -47,7 +47,7 @@ create table public.medicines (
   meals text[] not null default '{}',
   food text not null default 'after' check (food in ('before','after','any')),
   purpose jsonb,                          -- {"en": "...", "hi": "...", "mr": "..."}
-  purpose_source text not null default 'none' check (purpose_source in ('prescription','suggested','none')),
+  purpose_source text not null default 'none' check (purpose_source in ('prescription','suggested','child','none')),
   needs_check boolean not null default false,
   active boolean not null default false,  -- true only after the child approves
   created_at timestamptz not null default now()
