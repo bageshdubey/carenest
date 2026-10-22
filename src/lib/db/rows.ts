@@ -4,7 +4,6 @@ export type FamilyRow = {
   id: string;
   owner_id: string;
   child_name: string;
-  child_phone: string | null;
   child_lang: ChildLang;
   parent_call_name: string;
   parent_phone: string;

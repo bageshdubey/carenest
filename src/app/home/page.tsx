@@ -22,7 +22,7 @@ type Tab = (typeof TABS)[number];
 
 type Report = { id: string; lab: string | null; report_date: string | null; created_at: string; values: ReportValue[] };
 type Message = { id: string; direction: "in" | "out"; body: string; created_at: string };
-type Alert = { id: string; kind: string; severity: "check" | "urgent"; detail: { text?: string } | null; sent_to_whatsapp: boolean; created_at: string; seen_at?: string | null };
+type Alert = { id: string; kind: string; severity: "check" | "urgent"; detail: { text?: string } | null; created_at: string; seen_at?: string | null };
 
 /** Alert text as written for WhatsApp, without the "CareNest:" prefix or the link back to this app. */
 function alertText(a: Alert): string {
@@ -282,8 +282,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                 <div className="min-w-0 flex-1">
                   <p>{alertText(a)}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(a.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })} ·{" "}
-                    {a.sent_to_whatsapp ? t("sentWa") : t("dashboardOnly")}
+                    {new Date(a.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -300,7 +299,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
 
         {tab === "settings" && (
           <>
-            <SettingsForm lang={lang} callName={family.parent_call_name} meals={times} childLang={family.child_lang} parentLang={family.parent_lang} childPhone={family.child_phone ?? ""} />
+            <SettingsForm lang={lang} callName={family.parent_call_name} meals={times} childLang={family.child_lang} parentLang={family.parent_lang} />
             <Card className="flex-row items-center gap-3">
               <span className="flex-1 text-sm">
                 {t("parentNumber")}: <span className="font-mono">+{family.parent_phone}</span>

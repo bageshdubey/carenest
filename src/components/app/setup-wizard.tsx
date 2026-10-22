@@ -17,7 +17,7 @@ const PARENT_LANGS: [ParentLang, string][] = [
   ["hi", "हिंदी (Hindi)"],
   ["mr", "मराठी (Marathi)"],
 ];
-const TOTAL = 5;
+const TOTAL = 4;
 
 function Chip({ on, children, onClick }: { on: boolean; children: React.ReactNode; onClick: () => void }) {
   return (
@@ -39,7 +39,6 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
   const [call, setCall] = useState("Amma");
   const [other, setOther] = useState("");
   const [parentPhone, setParentPhone] = useState("");
-  const [childPhone, setChildPhone] = useState("");
   const [childLang, setChildLang] = useState<ChildLang>("en");
   const [parentLang, setParentLang] = useState<ParentLang>("en");
   const [meals, setMeals] = useState<Record<MealKey, string>>({ b: "08:30", l: "13:30", d: "20:30" });
@@ -57,12 +56,11 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
       if (!callName) return setError(t("otherErr"));
     }
     if (step === 2 && digits(parentPhone).length !== 10) return setError(t("numErr"));
-    if (step === 3 && digits(childPhone).length !== 10) return setError(t("numErr"));
-    if (step === 5) {
+    if (step === 4) {
       if (!mealsInOrder(meals)) return setError(t("mealOrderErr"));
       start(async () => {
-        const res = await createFamily({ childName, callName, parentPhone, childPhone, childLang, parentLang, meals });
-        if (res.ok) setStep(6);
+        const res = await createFamily({ childName, callName, parentPhone, childLang, parentLang, meals });
+        if (res.ok) setStep(5);
         else setError(res.error === "meals" ? t("mealOrderErr") : res.error === "phone" ? t("numErr") : t("saveErr"));
       });
       return;
@@ -70,7 +68,7 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
     setStep(step + 1);
   }
 
-  if (step === 6) {
+  if (step === 5) {
     return (
       <div className="flex flex-1 flex-col gap-4">
         <h1 className="text-2xl leading-tight font-bold">{t("photosQ")}</h1>
@@ -118,14 +116,6 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
 
       {step === 3 && (
         <>
-          <h1 className="text-2xl leading-tight font-bold">{t("yourNumberQ")}</h1>
-          <PhoneInput id="childPhone" value={childPhone} onChange={setChildPhone} />
-          <p className="text-muted-foreground">{t("yourNumberSub")}</p>
-        </>
-      )}
-
-      {step === 4 && (
-        <>
           <h1 className="text-2xl leading-tight font-bold">{t("langQ")}</h1>
           <p className="text-sm text-muted-foreground">{t("langYou")}</p>
           <div className="flex flex-wrap gap-2">
@@ -148,7 +138,7 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
         </>
       )}
 
-      {step === 5 && (
+      {step === 4 && (
         <>
           <h1 className="text-2xl leading-tight font-bold">{t("mealsQ")}</h1>
           <p className="text-muted-foreground">{t("mealsSub")}</p>

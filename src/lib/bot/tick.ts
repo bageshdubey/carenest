@@ -5,7 +5,7 @@ import { shiftDate } from "@/lib/domain/adherence";
 import { mealTimes } from "@/lib/db/rows";
 import { MISSED_AFTER_MIN, dueReminders, isOverdue, istNow, medicinesFor, toMinutes } from "@/lib/domain/meals";
 import { doctorQuestions, mealName, pm, reminderLines, visitText } from "@/lib/i18n/parent";
-import { alertChild, reminderToParent, toParent, visitNoteToChild } from "./send";
+import { alertChild, reminderToParent, toParent } from "./send";
 
 /**
  * Runs every few minutes (called by Supabase pg_cron):
@@ -86,7 +86,6 @@ async function visitReminders(family: FamilyRow, now: Date) {
   for (const visit of await visitsOn(family.id, [date, tomorrow])) {
     if (visit.visit_date === tomorrow && !visit.evening_sent_at && inMealWindow(family.meal_d, minutes)) {
       await toParent(family, visitText(lang, "visitEve", visit, vars));
-      await visitNoteToChild(family, visit);
       await markVisitReminded(visit.id, "evening");
     }
     if (visit.visit_date === date && !visit.morning_sent_at && inMealWindow(family.meal_b, minutes)) {

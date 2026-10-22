@@ -21,7 +21,6 @@ export type SetupInput = {
   childName: string;
   callName: string;
   parentPhone: string;
-  childPhone: string;
   childLang: ChildLang;
   parentLang: ParentLang;
   meals: Record<MealKey, string>;
@@ -34,9 +33,8 @@ export async function createFamily(input: SetupInput): Promise<ActionResult> {
   if (family) return { ok: true };
 
   const parentPhone = normalisePhone(input.parentPhone);
-  const childPhone = normalisePhone(input.childPhone);
   if (!input.childName.trim() || !input.callName.trim()) return { ok: false, error: "name" };
-  if (!PHONE.test(parentPhone) || !PHONE.test(childPhone)) return { ok: false, error: "phone" };
+  if (!PHONE.test(parentPhone)) return { ok: false, error: "phone" };
   if (!["en", "hi"].includes(input.childLang) || !["en", "hi", "mr"].includes(input.parentLang)) return { ok: false, error: "lang" };
   if (!Object.values(input.meals).every((t) => TIME.test(t)) || !mealsInOrder(input.meals)) return { ok: false, error: "meals" };
 
@@ -45,7 +43,6 @@ export async function createFamily(input: SetupInput): Promise<ActionResult> {
     const { error } = await supabase.from("families").insert({
       owner_id: user.id,
       child_name: input.childName.trim(),
-      child_phone: childPhone,
       child_lang: input.childLang,
       parent_call_name: input.callName.trim(),
       parent_phone: parentPhone,
@@ -181,12 +178,10 @@ export async function updateSettings(_prev: ActionResult | null, formData: FormD
   const childLang = String(formData.get("child_lang"));
   const parentLang = String(formData.get("parent_lang"));
   if (!["en", "hi"].includes(childLang) || !["en", "hi", "mr"].includes(parentLang)) return { ok: false, error: "lang" };
-  const childPhone = normalisePhone(String(formData.get("child_phone") ?? ""));
-  if (!PHONE.test(childPhone)) return { ok: false, error: "phone" };
 
   const { error } = await supabase
     .from("families")
-    .update({ meal_b: meals.b, meal_l: meals.l, meal_d: meals.d, child_lang: childLang, parent_lang: parentLang, child_phone: childPhone })
+    .update({ meal_b: meals.b, meal_l: meals.l, meal_d: meals.d, child_lang: childLang, parent_lang: parentLang })
     .eq("id", family.id);
   if (error) return { ok: false, error: "save" };
   revalidatePath("/home");
