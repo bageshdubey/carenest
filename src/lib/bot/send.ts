@@ -4,7 +4,6 @@ import { addAlert, logMessage } from "@/lib/db/repo";
 import { speak } from "@/lib/ai/gemini";
 import { VOICE_NOTE_MAX_BYTES, toVoiceNote } from "@/lib/audio";
 import { type Button, OUTSIDE_WINDOW, WhatsAppError, sendButtons, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
-import { formatTime } from "@/lib/domain/meals";
 import type { ChildLang, MealKey } from "@/lib/domain/types";
 import { pm } from "@/lib/i18n/parent";
 
@@ -101,8 +100,8 @@ const CHILD_MEAL: Record<ChildLang, Record<MealKey, string>> = {
 };
 
 /**
- * Records an alert for the dashboard and tries to send it to the child on WhatsApp.
- * The dashboard always has it, even if WhatsApp delivery fails.
+ * Records an alert for the child's dashboard. Nothing is sent to the child's phone:
+ * the WhatsApp test number reaches only 5 recipients, so those are kept for parents.
  */
 export async function alertChild(
   family: FamilyRow,
@@ -119,38 +118,5 @@ export async function alertChild(
     .replace("{meal}", detail.meal ? CHILD_MEAL[lang][detail.meal] : "")
     .replace("{p}", family.parent_phone);
 
-  let sent = false;
-  if (family.child_phone) {
-    try {
-      await sendText(family.child_phone, text);
-      sent = true;
-    } catch (e) {
-      const template = process.env.WHATSAPP_TEMPLATE_ALERT;
-      if (e instanceof WhatsAppError && e.code === OUTSIDE_WINDOW && template) {
-        await sendTemplate(family.child_phone, template, lang, [text.replace(/\n/g, " ")]);
-        sent = true;
-      } else {
-        console.error("Child alert not delivered", e);
-      }
-    }
-  }
-  await addAlert(family.id, kind, kind === "emergency" ? "urgent" : "check", { ...detail, text }, sent);
-}
-
-const CHILD_VISIT: Record<ChildLang, string> = {
-  en: "CareNest: {n}'s doctor visit is tomorrow, {d}{t}. {n} has been reminded.",
-  hi: "CareNest: {n} की डॉक्टर विज़िट कल है, {d}{t}। {n} को याद दिला दिया है।",
-};
-
-/** The evening before a visit, the child gets a copy of the parent's reminder. Best effort, never throws. */
-export async function visitNoteToChild(family: FamilyRow, visit: { visit_date: string; visit_time: string | null }) {
-  if (!family.child_phone) return;
-  const lang = family.child_lang;
-  const d = new Date(`${visit.visit_date}T00:00:00Z`).toLocaleDateString(lang === "hi" ? "hi-IN" : "en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
-  const t = visit.visit_time ? `, ${formatTime(visit.visit_time)}` : "";
-  try {
-    await sendText(family.child_phone, CHILD_VISIT[lang].replaceAll("{n}", family.parent_call_name).replace("{d}", d).replace("{t}", t));
-  } catch (e) {
-    console.error("Visit note to child not delivered", e);
-  }
+  await addAlert(family.id, kind, kind === "emergency" ? "urgent" : "check", { ...detail, text }, false);
 }

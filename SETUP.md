@@ -21,7 +21,7 @@ aistudio.google.com > Get API key > create one > `GEMINI_API_KEY` in `.env.local
 2. App settings > Basic > App secret > `WHATSAPP_APP_SECRET`.
 3. Make up a long random `WHATSAPP_VERIFY_TOKEN`.
 4. After the app is live: WhatsApp > Configuration > Webhook: URL `https://carenestapp.vercel.app/api/whatsapp`, verify token = the one above, subscribe to `messages`.
-5. Add the parent's and the child's numbers to the test number's recipient list (5 numbers max).
+5. Add the parent's number to the test number's recipient list (5 numbers max). The child gets alerts on the dashboard only, so their number is not needed.
 
 ## 5. Run locally
 ```bash

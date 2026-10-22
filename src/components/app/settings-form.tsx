@@ -3,7 +3,6 @@
 import { useActionState } from "react";
 import { signOut, updateSettings } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ChildLang, MealKey, ParentLang } from "@/lib/domain/types";
 import { CHILD_MEALS, makeT } from "@/lib/i18n/child";
@@ -14,18 +13,16 @@ export function SettingsForm({
   meals,
   childLang,
   parentLang,
-  childPhone,
 }: {
   lang: ChildLang;
   callName: string;
   meals: Record<MealKey, string>;
   childLang: ChildLang;
   parentLang: ParentLang;
-  childPhone: string;
 }) {
   const t = makeT(lang, { n: callName });
   const [state, action, pending] = useActionState(updateSettings, null);
-  const error = state && !state.ok ? (state.error === "meals" ? t("mealOrderErr") : state.error === "phone" ? t("numErr") : t("saveErr")) : "";
+  const error = state && !state.ok ? (state.error === "meals" ? t("mealOrderErr") : t("saveErr")) : "";
 
   return (
     <form action={action} className="flex flex-col gap-3">
@@ -56,12 +53,6 @@ export function SettingsForm({
             <option value="mr">मराठी (Marathi)</option>
           </select>
         </div>
-      </section>
-
-      <section className="flex flex-col gap-1 rounded-2xl bg-card p-4">
-        <h2 className="font-heading font-bold">{t("settingsNumbers")}</h2>
-        <Label htmlFor="child_phone">{t("yourNumberQ")}</Label>
-        <Input id="child_phone" name="child_phone" inputMode="numeric" defaultValue={childPhone} className="h-11 text-base" />
       </section>
 
       {error ? (

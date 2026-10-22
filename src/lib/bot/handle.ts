@@ -28,7 +28,7 @@ import { downloadMedia, sendText } from "@/lib/whatsapp/client";
 import type { Incoming } from "@/lib/whatsapp/webhook";
 import { alertChild, toParent } from "./send";
 
-const v = (f: FamilyRow) => ({ n: f.parent_call_name, c: f.child_name, p: f.child_phone ?? "" });
+const v = (f: FamilyRow) => ({ n: f.parent_call_name, c: f.child_name });
 
 /** Runs an AI call. If it fails for any reason, asks the parent to send again (never silence) and returns null. */
 async function orBusy<T>(family: FamilyRow, call: () => Promise<T>): Promise<T | null> {
