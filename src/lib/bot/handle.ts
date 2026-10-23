@@ -145,7 +145,7 @@ async function reply(family: FamilyRow, u: Understood, fromVoice: boolean) {
   }
   if (u.intent === "report") {
     const values = await latestReportValues(family.id);
-    await send(values.length ? reportText(lang, family.parent_call_name, values, {}) : pm(lang, "noReport", vars), [{ id: "doc", title: pm(lang, "q_doc") }]);
+    await send(values.length ? reportText(lang, vars, values, {}) : pm(lang, "noReport", vars), [{ id: "doc", title: pm(lang, "q_doc") }]);
     return;
   }
   if (u.intent === "greeting" || u.intent === "other") {
@@ -212,7 +212,7 @@ async function handleDocument(family: FamilyRow, mediaId: string, mimeType: stri
   if (result.type === "lab_report") {
     const last = await previousValues(family.id);
     await saveReport({ familyId: family.id, photoPath, lab: result.lab, date: result.date, values: result.values });
-    await toParent(family, reportText(lang, family.parent_call_name, result.values, last), [{ id: "doc", title: pm(lang, "q_doc") }]);
+    await toParent(family, reportText(lang, v(family), result.values, last), [{ id: "doc", title: pm(lang, "q_doc") }]);
     const out = result.values.filter((x) => isOutOfRange(x.flag)).length;
     if (out) await alertChild(family, "report_out_of_range", { k: out });
     return;

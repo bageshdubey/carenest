@@ -449,7 +449,7 @@ function ReportCard({
           <p className="font-mono text-lg">{v.valueText}</p>
           <RangeBar v={v} />
           {v.rangeText ? <p className="font-mono text-[11px] text-muted-foreground">{v.rangeText}</p> : null}
-          {full && v.whatItMeasures ? <p className="text-xs text-muted-foreground">{v.whatItMeasures[lang]}</p> : null}
+          {full && v.whatItMeasures ? <p className="text-xs whitespace-pre-line text-muted-foreground">{v.whatItMeasures[lang]}</p> : null}
         </div>
       ))}
       <p className="text-xs text-muted-foreground">{t("analysisOnly")}</p>

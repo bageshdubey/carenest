@@ -118,7 +118,10 @@ const DocumentSchema = z.object({
           value_number: z.number().nullable(),
           unit: z.string().nullable(),
           range_text: z.string().nullable().describe("Reference range exactly as printed. Null if none."),
-          what_it_measures: Tri.nullable().describe("What the test measures, under 8 plain words, no judgement about the value."),
+          what_it_is: Tri.nullable().describe("What the test is, under 12 plain words. Never name a disease or condition."),
+          why_done: Tri.nullable().describe(
+            "Why the test is done, under 12 plain words, as what in the body is being checked. Never name a disease or condition, and no judgement about the value.",
+          ),
         }),
       ),
     })
@@ -148,6 +151,20 @@ Map timings: morning or 1-0-0 to morning, afternoon or 0-1-0 to afternoon, night
 For lab reports, copy each test, its value and the reference range printed on the report. Never say whether a value is good or bad.
 If the document says when to come back (follow-up, review, next visit, "SOS" does not count), fill follow_up. Otherwise set it to null.
 Never add advice, diagnosis or instructions that are not on the document.`;
+
+/**
+ * What the test is and why it's done, kept as two lines in one text per language,
+ * so it fits the existing what_it_measures column. Reports saved before this have one line.
+ */
+function describeTest(isText: z.infer<typeof Tri> | null, why: z.infer<typeof Tri> | null): z.infer<typeof Tri> | null {
+  if (!isText && !why) return null;
+  const join = (l: "en" | "hi" | "mr") => {
+    const a = isText?.[l]?.trim() ?? "";
+    const b = why?.[l]?.trim() ?? "";
+    return b ? `${a}\n${b}` : a;
+  };
+  return { en: join("en"), hi: join("hi"), mr: join("mr") };
+}
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -208,7 +225,7 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
         rangeLow: low,
         rangeHigh: high,
         flag: flagValue(v.value_number, low, high),
-        whatItMeasures: v.what_it_measures,
+        whatItMeasures: describeTest(v.what_it_is, v.why_done),
       };
     });
     return { type: "lab_report", values, lab: doc.lab_report.lab, date: doc.lab_report.date, followUp: toFollowUp(doc.follow_up), raw: doc };
