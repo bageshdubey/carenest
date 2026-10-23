@@ -11,7 +11,11 @@ const value = (test: string, flag: RangeFlag): ReportValue => ({
   rangeLow: flag === "unknown" ? null : 13,
   rangeHigh: flag === "unknown" ? null : 17,
   flag,
-  whatItMeasures: { en: "Oxygen-carrying protein in blood", hi: "खून में ऑक्सीजन ले जाने वाला प्रोटीन", mr: "रक्तातील ऑक्सिजन वाहून नेणारे प्रथिन" },
+  whatItMeasures: {
+    en: "A protein in red blood cells\nTo check how well blood carries oxygen",
+    hi: "लाल रक्त कोशिकाओं में एक प्रोटीन\nयह देखने के लिए कि खून ऑक्सीजन कितनी अच्छी तरह ले जाता है",
+    mr: "लाल रक्तपेशींमधील एक प्रथिन\nरक्त ऑक्सिजन किती चांगले वाहून नेते हे पाहण्यासाठी",
+  },
 });
 const vars = { n: "Amma", c: "Rohan" };
 
@@ -19,7 +23,8 @@ describe("report summary", () => {
   it("counts every result and lists only those outside the printed range", () => {
     const text = reportText("en", vars, [value("Haemoglobin", "low"), value("Sodium", "in_range"), value("Vitamin B12", "unknown")], {});
     expect(text).toContain("I read 3 results: 1 within the printed range, 1 outside it, 1 with no printed range.");
-    expect(text).toContain("• Haemoglobin: 12.5 g/dL. Printed range 13.0 - 17.0. Low.");
+    expect(text).toContain("Please show these to your doctor: Haemoglobin (low).");
+    expect(text).toContain("• Haemoglobin: 12.5 g/dL. Printed range 13.0 - 17.0. Low.\n  What it is: A protein in red blood cells\n  Why it's done: To check how well blood carries oxygen");
     expect(text).not.toContain("Sodium");
     expect(text).not.toContain("Vitamin B12");
     expect(text).toContain("Rohan can see the full report.");
@@ -29,6 +34,7 @@ describe("report summary", () => {
     const text = reportText("en", vars, [value("Sodium", "in_range")], {});
     expect(text).toContain("No result is outside the printed range.");
     expect(text).not.toContain("Outside the printed range:");
+    expect(text).not.toContain("show these to your doctor");
   });
 
   it("fits one WhatsApp message for a long report, in every language", () => {
@@ -39,5 +45,19 @@ describe("report summary", () => {
       expect(text).toMatch(/120/);
     }
     expect(reportText("en", vars, values, {})).toMatch(/…and \d+ more\./);
+  });
+
+  it("keeps the report's order and names at most 8 tests in the doctor line", () => {
+    const values = Array.from({ length: 10 }, (_, i) => value(`T${i + 1}`, "high"));
+    expect(reportText("en", vars, values, {})).toContain(
+      "Please show these to your doctor: T1 (high), T2 (high), T3 (high), T4 (high), T5 (high), T6 (high), T7 (high), T8 (high), and 2 more.",
+    );
+  });
+
+  it("shows one line for older reports that only say what the test is", () => {
+    const old = { ...value("Sodium", "high"), whatItMeasures: { en: "Salt level in blood", hi: "खून में नमक", mr: "रक्तातील मीठ" } };
+    const text = reportText("en", vars, [old], {});
+    expect(text).toContain("  What it is: Salt level in blood");
+    expect(text).not.toContain("Why it's done");
   });
 });

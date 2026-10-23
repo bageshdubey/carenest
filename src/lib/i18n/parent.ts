@@ -29,7 +29,10 @@ const MSG = {
     repFull: "{c} can see the full report.",
     repRow: "• {t}: {v}. Printed range {r}. {s}. Last time {l}.",
     repRowNoLast: "• {t}: {v}. Printed range {r}. {s}.",
-    repWhat: "  ({w})",
+    repWhat: "  What it is: {w}",
+    repWhy: "  Why it's done: {w}",
+    repFocus: "Please show these to your doctor: {list}.",
+    repFocusMore: "and {k} more",
     repOutro: "Please show this to your doctor. I can't say what it means for your health.",
     docQIntro: "You could ask your doctor:",
     docQValue: "My {t} is {dir} the printed range. What does that mean for me?",
@@ -85,7 +88,10 @@ const MSG = {
     repFull: "पूरी रिपोर्ट {c} देख सकते हैं।",
     repRow: "• {t}: {v}। छपी रेंज {r}। {s}। पिछली बार {l}।",
     repRowNoLast: "• {t}: {v}। छपी रेंज {r}। {s}।",
-    repWhat: "  ({w})",
+    repWhat: "  यह क्या है: {w}",
+    repWhy: "  यह क्यों होता है: {w}",
+    repFocus: "कृपया ये डॉक्टर को दिखाएँ: {list}।",
+    repFocusMore: "और {k} नतीजे",
     repOutro: "कृपया यह अपने डॉक्टर को दिखाएँ। इसका आपकी सेहत के लिए क्या मतलब है, यह मैं नहीं बता सकता।",
     docQIntro: "आप डॉक्टर से पूछ सकते हैं:",
     docQValue: "मेरा {t} छपी रेंज से {dir} है। मेरे लिए इसका क्या मतलब है?",
@@ -140,7 +146,10 @@ const MSG = {
     repFull: "पूर्ण रिपोर्ट {c} पाहू शकतात.",
     repRow: "• {t}: {v}. छापलेली रेंज {r}. {s}. मागच्या वेळी {l}.",
     repRowNoLast: "• {t}: {v}. छापलेली रेंज {r}. {s}.",
-    repWhat: "  ({w})",
+    repWhat: "  हे काय आहे: {w}",
+    repWhy: "  हे का करतात: {w}",
+    repFocus: "कृपया हे डॉक्टरांना दाखवा: {list}.",
+    repFocusMore: "आणि आणखी {k}",
     repOutro: "कृपया हे तुमच्या डॉक्टरांना दाखवा. याचा तुमच्या आरोग्यासाठी काय अर्थ आहे, हे मी सांगू शकत नाही.",
     docQIntro: "तुम्ही डॉक्टरांना विचारू शकता:",
     docQValue: "माझे {t} छापलेल्या रेंजपेक्षा {dir} आहे. माझ्यासाठी याचा काय अर्थ आहे?",
@@ -250,6 +259,19 @@ export function reminderLines(lang: ParentLang, meal: MealKey, meds: Medicine[])
   return groups.join("\n");
 }
 
+/** Most test names in the "show your doctor" line; the rest become "and N more". */
+const FOCUS_MAX = 8;
+
+/** "Please show these to your doctor: Haemoglobin (low), HbA1c (high)." In the report's own order: the app never ranks results. */
+function focusLine(lang: ParentLang, outside: ReportValue[]): string {
+  const names = outside.slice(0, FOCUS_MAX).map((v) => {
+    const flag = v.flag === "high" ? MSG[lang].high : MSG[lang].low;
+    return `${v.test} (${lang === "en" ? flag.toLowerCase() : flag})`;
+  });
+  if (outside.length > FOCUS_MAX) names.push(pm(lang, "repFocusMore", { k: String(outside.length - FOCUS_MAX) }));
+  return pm(lang, "repFocus", { list: names.join(", ") });
+}
+
 /** WhatsApp allows 4,096 characters in a text. This leaves room for "You asked: …" above a voice answer. */
 export const REPORT_MAX = 3500;
 
@@ -268,6 +290,7 @@ export function reportText(
   const outside = values.filter((v) => v.flag === "high" || v.flag === "low");
   const head = [
     pm(lang, "repIntro", vars),
+    ...(outside.length ? [focusLine(lang, outside)] : []),
     pm(lang, "repSummary", {
       k: String(values.length),
       i: count((v) => v.flag === "in_range"),
@@ -287,8 +310,10 @@ export function reportText(
       s: v.flag === "high" ? MSG[lang].high : MSG[lang].low,
       l: last ?? "",
     });
-    const what = v.whatItMeasures ? `\n${fill(MSG[lang].repWhat, { w: v.whatItMeasures[lang] })}` : "";
-    return row + what;
+    // Stored as "what it is" and "why it's done" on two lines; older reports have only the first.
+    const [what, why] = (v.whatItMeasures?.[lang] ?? "").split("\n");
+    const lines = [what && fill(MSG[lang].repWhat, { w: what }), why && fill(MSG[lang].repWhy, { w: why })].filter(Boolean);
+    return [row, ...lines].join("\n");
   });
 
   const kept: string[] = [];
