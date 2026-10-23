@@ -16,6 +16,9 @@ Steps to get CareNest running. Secrets go in `.env.local` (on your laptop) and i
 ## 3. Gemini
 aistudio.google.com > Get API key > create one > `GEMINI_API_KEY` in `.env.local`. On the free tier Google may use what is sent to improve its products; use a key with billing on before real families test.
 
+## 3a. Sarvam (voice notes)
+dashboard.sarvam.ai > API keys > create one > `SARVAM_API_KEY` in `.env.local` and in Vercel. Add credits under billing. Copy the other `SARVAM_*` lines from `.env.example` too; they pick the model, pace and the voice for each parent language. Without the key, the parent gets text only.
+
 ## 4. WhatsApp (Meta)
 1. Meta app > WhatsApp > API Setup: generate a token > `WHATSAPP_TOKEN`. (The test token lasts 24 hours.)
 2. App settings > Basic > App secret > `WHATSAPP_APP_SECRET`.

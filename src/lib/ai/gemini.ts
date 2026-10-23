@@ -23,16 +23,10 @@ function gemini(): GoogleGenAI {
 /** Thrown when Gemini gives no usable answer in time, so the bot can ask the parent to send again. */
 export class AiBusyError extends Error {}
 
-/** Speech for voice notes. Both tested with Hindi on 21 Oct 2026. */
-const TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.8-flash-lite-tts";
-const TTS_FALLBACK_MODEL = process.env.GEMINI_TTS_FALLBACK_MODEL || "gemini-3.8-flash-tts";
-const TTS_VOICE = process.env.GEMINI_TTS_VOICE || "Kore";
-
 const BUSY_STATUS = new Set([429, 500, 503]);
 const TRIES_PER_MODEL = 3;
 /** One photo can take 20 to 80 s on Gemini. The webhook may run 300 s; this leaves time to speak, save and reply. */
 const BUDGET_MS = 150_000;
-const SPEECH_BUDGET_MS = 45_000;
 const MIN_TRY_MS = 5_000;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -288,19 +282,4 @@ export async function understand(
   const heard = "text" in input ? input.text : (result?.heard ?? "").trim();
   if (!result) return { heard, intent: "other", meal: null, answer: null };
   return { heard, intent: result.intent, meal: result.meal, answer: result.answer };
-}
-
-/** Reads a reply aloud for a voice note. Returns raw audio (WAV or 16-bit PCM) and its type, or null if Gemini gave none. */
-export async function speak(text: string): Promise<{ data: Buffer; mimeType: string } | null> {
-  const response = await generate(
-    {
-      contents: [{ role: "user", parts: [{ text: `Read this aloud slowly and warmly, exactly as written:\n${text}` }] }],
-      config: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: TTS_VOICE } } } },
-    },
-    [TTS_MODEL, TTS_FALLBACK_MODEL],
-    SPEECH_BUDGET_MS,
-  );
-  const audio = response.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
-  if (!audio?.data) return null;
-  return { data: Buffer.from(audio.data, "base64"), mimeType: audio.mimeType ?? "audio/wav" };
 }
