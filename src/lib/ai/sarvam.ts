@@ -15,65 +15,23 @@ const SPEAKER: Record<ParentLang, string> = {
   mr: process.env.SARVAM_SPEAKER_MR || "ishita_mr_conversational",
 };
 
-/** Sarvam reads at most 2,500 characters per request. */
-export const CHUNK_MAX = 2500;
-/** Per request. A voice note that takes longer is skipped and the text still goes. */
+/**
+ * WhatsApp plays voice notes up to 512 KB, about 1,500 characters of speech at our bitrate
+ * (tested 23 Oct 2026). Longer replies, such as big reports, go as text only, so no credits are spent on audio WhatsApp would refuse.
+ * This is also under Sarvam's 2,500-character limit, so one request is enough.
+ */
+export const VOICE_MAX_CHARS = 1500;
+/** A voice note that takes longer is skipped and the text still goes. */
 const TIMEOUT_MS = 30_000;
 
-/** Splits text into pieces Sarvam accepts, at paragraph breaks, then line breaks, then spaces. */
-export function chunkText(text: string, max = CHUNK_MAX): string[] {
-  const chunks: string[] = [];
-  let rest = text.trim();
-  while (rest.length > max) {
-    const window = rest.slice(0, max + 1);
-    const cut = [window.lastIndexOf("\n\n"), window.lastIndexOf("\n"), window.lastIndexOf(" ")].find((i) => i > 0) ?? max;
-    chunks.push(rest.slice(0, cut).trim());
-    rest = rest.slice(cut).trim();
+/** Reads a reply aloud in the parent's language. Returns WAV audio, or null if the text is too long or there is no Sarvam key. */
+export async function speak(text: string, lang: ParentLang): Promise<{ data: Buffer; mimeType: string } | null> {
+  if (text.length > VOICE_MAX_CHARS) return null;
+  const apiKey = process.env.SARVAM_API_KEY;
+  if (!apiKey) {
+    console.error("SARVAM_API_KEY is not set, so no voice note");
+    return null;
   }
-  if (rest) chunks.push(rest);
-  return chunks;
-}
-
-/** Reads the format and the sample data out of a WAV file. */
-function wavParts(wav: Buffer): { fmt: Buffer; data: Buffer } {
-  if (wav.toString("ascii", 0, 4) !== "RIFF" || wav.toString("ascii", 8, 12) !== "WAVE") throw new Error("Not a WAV file");
-  let fmt: Buffer | null = null;
-  let offset = 12;
-  while (offset + 8 <= wav.length) {
-    const id = wav.toString("ascii", offset, offset + 4);
-    const size = wav.readUInt32LE(offset + 4);
-    const body = wav.subarray(offset + 8, Math.min(offset + 8 + size, wav.length));
-    if (id === "fmt ") fmt = body;
-    if (id === "data") {
-      if (!fmt) throw new Error("WAV data before format");
-      return { fmt, data: body };
-    }
-    offset += 8 + size + (size % 2);
-  }
-  throw new Error("WAV has no data");
-}
-
-/** Joins WAV files of the same format into one, so a long reply is still one voice note. */
-export function joinWavs(wavs: Buffer[]): Buffer {
-  if (wavs.length === 1) return wavs[0];
-  const parts = wavs.map(wavParts);
-  const fmt = parts[0].fmt;
-  if (parts.some((p) => !p.fmt.equals(fmt))) throw new Error("WAV parts differ in format");
-  const data = Buffer.concat(parts.map((p) => p.data));
-  const head = Buffer.alloc(12);
-  head.write("RIFF", 0, "ascii");
-  head.writeUInt32LE(4 + 8 + fmt.length + 8 + data.length, 4);
-  head.write("WAVE", 8, "ascii");
-  const chunk = (id: string, body: Buffer) => {
-    const h = Buffer.alloc(8);
-    h.write(id, 0, "ascii");
-    h.writeUInt32LE(body.length, 4);
-    return Buffer.concat([h, body]);
-  };
-  return Buffer.concat([head, chunk("fmt ", fmt), chunk("data", data)]);
-}
-
-async function speakChunk(text: string, lang: ParentLang, apiKey: string): Promise<Buffer> {
   const res = await fetch(API_URL, {
     method: "POST",
     headers: { "api-subscription-key": apiKey, "Content-Type": "application/json" },
@@ -83,18 +41,5 @@ async function speakChunk(text: string, lang: ParentLang, apiKey: string): Promi
   if (!res.ok) throw new Error(`Sarvam ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const audio = ((await res.json()) as { audios?: string[] }).audios?.[0];
   if (!audio) throw new Error("Sarvam returned no audio");
-  return Buffer.from(audio, "base64");
-}
-
-/** Reads a reply aloud in the parent's language. Returns WAV audio, or null if there is no Sarvam key. */
-export async function speak(text: string, lang: ParentLang): Promise<{ data: Buffer; mimeType: string } | null> {
-  const apiKey = process.env.SARVAM_API_KEY;
-  if (!apiKey) {
-    console.error("SARVAM_API_KEY is not set, so no voice note");
-    return null;
-  }
-  const wavs: Buffer[] = [];
-  for (const chunk of chunkText(text)) wavs.push(await speakChunk(chunk, lang, apiKey));
-  if (!wavs.length) return null;
-  return { data: joinWavs(wavs), mimeType: "audio/wav" };
+  return { data: Buffer.from(audio, "base64"), mimeType: "audio/wav" };
 }

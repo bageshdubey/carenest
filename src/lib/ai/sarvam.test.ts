@@ -1,51 +1,29 @@
-import { describe, expect, it } from "vitest";
-import { CHUNK_MAX, chunkText, joinWavs } from "./sarvam";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { VOICE_MAX_CHARS, speak } from "./sarvam";
 
-/** A tiny 16-bit mono WAV holding the given samples. */
-function wav(samples: number[], rate = 24000): Buffer {
-  const data = Buffer.alloc(samples.length * 2);
-  samples.forEach((s, i) => data.writeInt16LE(s, i * 2));
-  const fmt = Buffer.alloc(16);
-  fmt.writeUInt16LE(1, 0);
-  fmt.writeUInt16LE(1, 2);
-  fmt.writeUInt32LE(rate, 4);
-  fmt.writeUInt32LE(rate * 2, 8);
-  fmt.writeUInt16LE(2, 12);
-  fmt.writeUInt16LE(16, 14);
-  const head = Buffer.alloc(12);
-  head.write("RIFF", 0, "ascii");
-  head.writeUInt32LE(4 + 24 + 8 + data.length, 4);
-  head.write("WAVE", 8, "ascii");
-  const chunk = (id: string, body: Buffer) => {
-    const h = Buffer.alloc(8);
-    h.write(id, 0, "ascii");
-    h.writeUInt32LE(body.length, 4);
-    return Buffer.concat([h, body]);
-  };
-  return Buffer.concat([head, chunk("fmt ", fmt), chunk("data", data)]);
-}
-
-describe("sarvam chunks", () => {
-  it("keeps short text in one piece", () => {
-    expect(chunkText("Lunch time, Amma.")).toEqual(["Lunch time, Amma."]);
-  });
-
-  it("splits long text under the limit, at paragraph breaks first", () => {
-    const para = "एम्लोडिपिन 5 mg, 1 गोली, खाने के बाद। ".repeat(40).trim();
-    const chunks = chunkText([para, para, para].join("\n\n"));
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(CHUNK_MAX);
-    expect(chunks.join(" ").replace(/\s+/g, " ")).toBe([para, para, para].join(" ").replace(/\s+/g, " "));
-  });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
-describe("joining WAV files", () => {
-  it("joins the samples into one valid WAV", () => {
-    const joined = joinWavs([wav([1, 2]), wav([3, 4, 5])]);
-    expect(joined.equals(wav([1, 2, 3, 4, 5]))).toBe(true);
+describe("sarvam voice", () => {
+  it("skips text too long for a WhatsApp voice note, without calling Sarvam", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    vi.stubEnv("SARVAM_API_KEY", "test-key");
+    expect(await speak("a".repeat(VOICE_MAX_CHARS + 1), "en")).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("refuses parts with different formats", () => {
-    expect(() => joinWavs([wav([1], 24000), wav([2], 22050)])).toThrow();
+  it("asks for the parent's language and that language's voice", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ audios: [Buffer.from("RIFF").toString("base64")] })));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubEnv("SARVAM_API_KEY", "test-key");
+    const result = await speak("दोपहर के खाने का समय, अम्मा।", "hi");
+    expect(result?.mimeType).toBe("audio/wav");
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.language_code).toBe("hi-IN");
+    expect(body.speaker).toMatch(/_hi_/);
+    expect(body.text).toBe("दोपहर के खाने का समय, अम्मा।");
   });
 });
