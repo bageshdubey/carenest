@@ -1,7 +1,7 @@
 import "server-only";
 import type { FamilyRow } from "@/lib/db/rows";
 import { addAlert, logMessage } from "@/lib/db/repo";
-import { speak } from "@/lib/ai/gemini";
+import { speak } from "@/lib/ai/sarvam";
 import { VOICE_NOTE_MAX_BYTES, toVoiceNote } from "@/lib/audio";
 import { type Button, OUTSIDE_WINDOW, WhatsAppError, sendButtons, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
 import type { ChildLang, MealKey } from "@/lib/domain/types";
@@ -24,7 +24,7 @@ function forSpeech(text: string): string {
 /** Speaks the text as a voice note. Never throws: if any step fails, the text message still goes. */
 async function sendVoiceNote(family: FamilyRow, text: string) {
   try {
-    const speech = await speak(forSpeech(text));
+    const speech = await speak(forSpeech(text), family.parent_lang);
     if (!speech) return;
     const note = await toVoiceNote(speech.data, speech.mimeType);
     if (note.length > VOICE_NOTE_MAX_BYTES) return;
