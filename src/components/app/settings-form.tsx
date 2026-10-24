@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { signOut, updateSettings } from "@/app/actions";
+import { useActionState, useState } from "react";
+import { updateSettings } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { ChildLang, MealKey, ParentLang } from "@/lib/domain/types";
@@ -23,9 +23,18 @@ export function SettingsForm({
   const t = makeT(lang, { n: callName });
   const [state, action, pending] = useActionState(updateSettings, null);
   const error = state && !state.ok ? (state.error === "meals" ? t("mealOrderErr") : t("saveErr")) : "";
+  // Save turns green only when something differs from what is saved. After saving, the page
+  // reloads with the new values, so it goes grey again.
+  const saved: Record<string, string> = { meal_b: meals.b, meal_l: meals.l, meal_d: meals.d, child_lang: childLang, parent_lang: parentLang };
+  const [current, setCurrent] = useState(saved);
+  const changed = Object.keys(saved).some((k) => current[k] !== saved[k]);
 
   return (
-    <form action={action} className="flex flex-col gap-3">
+    <form
+      action={action}
+      className="flex flex-col gap-3"
+      onChange={(e) => setCurrent(Object.fromEntries([...new FormData(e.currentTarget)].map(([k, v]) => [k, String(v)])))}
+    >
       <section className="rounded-2xl bg-card px-4 py-2">
         <h2 className="pt-2 font-heading font-bold">{t("settingsMeals")}</h2>
         {(["b", "l", "d"] as MealKey[]).map((k) => (
@@ -60,12 +69,9 @@ export function SettingsForm({
           {error}
         </p>
       ) : null}
-      {state?.ok ? <p className="rounded-xl bg-ok-soft px-3 py-2 text-sm text-ok">{t("saved")}</p> : null}
-      <Button type="submit" size="lg" className="h-12 rounded-xl text-base font-bold" disabled={pending}>
+      {state?.ok && !changed ? <p className="rounded-xl bg-ok-soft px-3 py-2 text-sm text-ok">{t("saved")}</p> : null}
+      <Button type="submit" size="lg" variant={changed ? "default" : "secondary"} className="h-12 rounded-xl text-base font-bold" disabled={!changed || pending}>
         {t("save")}
-      </Button>
-      <Button type="button" variant="ghost" size="lg" className="h-12 rounded-xl" onClick={() => signOut()}>
-        {t("signOut")}
       </Button>
     </form>
   );

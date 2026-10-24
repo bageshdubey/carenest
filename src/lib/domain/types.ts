@@ -20,6 +20,10 @@ export type Medicine = {
   purpose: Purpose | null;
   purposeSource: "prescription" | "suggested" | "child" | "none";
   needsCheck: boolean;
+  /** Last day of a course, "YYYY-MM-DD". Missing or null: no end. */
+  endsOn?: string | null;
+  /** "Only when needed" (SOS): on the list, never reminded. */
+  asNeeded?: boolean;
 };
 
 export type DoseStatus = "sent" | "taken" | "missed";

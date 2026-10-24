@@ -46,6 +46,10 @@ export type MedicineRow = {
   created_at: string;
   /** Set when the child stops the medicine. Missing until migration 0006 has run. */
   stopped_at?: string | null;
+  /** Last day of a course. Missing until migration 0007 has run. */
+  ends_on?: string | null;
+  /** "Only when needed" (SOS). Missing until migration 0007 has run. */
+  as_needed?: boolean;
 };
 
 export type ReportValueRow = {
@@ -77,6 +81,8 @@ export function toMedicine(r: MedicineRow): Medicine {
     purpose: r.purpose,
     purposeSource: r.purpose_source,
     needsCheck: r.needs_check,
+    endsOn: r.ends_on ?? null,
+    asNeeded: r.as_needed ?? false,
   };
 }
 
@@ -92,6 +98,8 @@ export function fromMedicine(familyId: string, prescriptionId: string | null, m:
     purpose: m.purpose,
     purpose_source: m.purposeSource,
     needs_check: m.needsCheck,
+    ends_on: m.endsOn ?? null,
+    as_needed: m.asNeeded ?? false,
   };
 }
 

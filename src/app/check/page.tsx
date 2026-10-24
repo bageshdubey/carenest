@@ -1,3 +1,4 @@
+import { BackLink } from "@/components/app/back-link";
 import { ListEditor } from "@/components/app/list-editor";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { type MedicineRow, toMedicine } from "@/lib/db/rows";
@@ -11,6 +12,7 @@ export const instant = false;
 export default async function CheckPage() {
   const { supabase, family } = await requireFamily();
   const after = family.parent_linked_at ? "/home" : "/setup";
+  const t = makeT(family.child_lang);
 
   const { data: pending } = await supabase
     .from("prescriptions")
@@ -32,8 +34,9 @@ export default async function CheckPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-8">
-      <div className="mb-2 flex justify-end">
-        <ThemeToggle label={makeT(family.child_lang)("themeToggle")} />
+      <div className="mb-2 flex items-center justify-between">
+        <BackLink href={after} label={t("back")} />
+        <ThemeToggle label={t("themeToggle")} />
       </div>
       <ListEditor
         lang={family.child_lang}

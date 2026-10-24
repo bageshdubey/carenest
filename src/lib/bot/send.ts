@@ -75,7 +75,7 @@ export async function reminderToParent(family: FamilyRow, body: string, buttons:
   }
 }
 
-type AlertKind = "new_list" | "dose_missed" | "report_out_of_range" | "advice_question" | "emergency";
+type AlertKind = "new_list" | "dose_missed" | "report_out_of_range" | "advice_question" | "emergency" | "course_ended";
 
 const ALERT_TEXT: Record<ChildLang, Record<AlertKind, string>> = {
   en: {
@@ -84,6 +84,7 @@ const ALERT_TEXT: Record<ChildLang, Record<AlertKind, string>> = {
     report_out_of_range: "CareNest: {n}'s new report has {k} values outside the printed range. {url}",
     advice_question: 'CareNest: {n} asked "{q}". They were told to ask the doctor or call you.',
     emergency: 'CareNest URGENT: {n} wrote "{q}". Please call now: +{p}',
+    course_ended: "CareNest: {n}'s course of {m} has ended. Reminders for it have stopped.",
   },
   hi: {
     new_list: "CareNest: {n} ने नया पर्चा भेजा है। कृपया सूची जाँचें: {url}",
@@ -91,6 +92,7 @@ const ALERT_TEXT: Record<ChildLang, Record<AlertKind, string>> = {
     report_out_of_range: "CareNest: {n} की नई रिपोर्ट में {k} मान छपी रेंज से बाहर हैं। {url}",
     advice_question: 'CareNest: {n} ने पूछा "{q}"। उन्हें डॉक्टर से पूछने या आपको फ़ोन करने को कहा गया।',
     emergency: 'CareNest तुरंत: {n} ने लिखा "{q}"। कृपया अभी फ़ोन करें: +{p}',
+    course_ended: "CareNest: {n} की {m} का कोर्स पूरा हो गया है। इसकी याद दिलाना बंद कर दिया गया है।",
   },
 };
 
@@ -106,7 +108,7 @@ const CHILD_MEAL: Record<ChildLang, Record<MealKey, string>> = {
 export async function alertChild(
   family: FamilyRow,
   kind: AlertKind,
-  detail: { q?: string; k?: number; meal?: MealKey } = {},
+  detail: { q?: string; k?: number; meal?: MealKey; m?: string } = {},
 ) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://carenestapp.vercel.app";
   const lang = family.child_lang;
@@ -116,6 +118,7 @@ export async function alertChild(
     .replace("{q}", (detail.q ?? "").slice(0, 200))
     .replace("{k}", String(detail.k ?? ""))
     .replace("{meal}", detail.meal ? CHILD_MEAL[lang][detail.meal] : "")
+    .replace("{m}", detail.m ?? "")
     .replace("{p}", family.parent_phone);
 
   await addAlert(family.id, kind, kind === "emergency" ? "urgent" : "check", { ...detail, text }, false);

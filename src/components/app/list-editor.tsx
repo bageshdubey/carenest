@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type DuplicateFlag, findDuplicates, medicineKey } from "@/lib/domain/duplicates";
 import type { ChildLang, Food, MealKey, Medicine } from "@/lib/domain/types";
-import { CHILD_FOOD, CHILD_MEALS, makeT } from "@/lib/i18n/child";
+import { CHILD_FOOD, CHILD_MEALS, makeT, shortDate } from "@/lib/i18n/child";
 
 type Row = EditedMedicine & { needsCheck: boolean; source: Medicine["purposeSource"]; editing: boolean };
 
@@ -42,6 +42,8 @@ export function ListEditor({
       food: m.food,
       purposeText: m.purpose?.en ?? "",
       purposeChanged: false,
+      endsOn: m.endsOn ?? "",
+      asNeeded: m.asNeeded ?? false,
       needsCheck: m.needsCheck,
       source: m.purposeSource,
       editing: m.needsCheck,
@@ -57,15 +59,15 @@ export function ListEditor({
   const [keep, setKeep] = useState<Record<string, boolean>>({});
 
   const update = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const toggleMeal = (i: number, k: MealKey) => {
-    const meals = rows[i].meals.includes(k) ? rows[i].meals.filter((m) => m !== k) : [...rows[i].meals, k];
-    update(i, { meals: (["b", "l", "d"] as MealKey[]).filter((m) => meals.includes(m)) });
+  const toggled = (current: MealKey[], k: MealKey) => {
+    const meals = current.includes(k) ? current.filter((m) => m !== k) : [...current, k];
+    return (["b", "l", "d"] as MealKey[]).filter((m) => meals.includes(m));
   };
 
   function save() {
     setError("");
     const live = rows.filter((r) => r.name.trim());
-    if (live.some((r) => r.meals.length === 0)) return setError(t("mealNeedErr"));
+    if (live.some((r) => !r.asNeeded && r.meals.length === 0)) return setError(t("mealNeedErr"));
     if (live.some((r) => r.needsCheck && r.editing)) return setError(t("checkFlagErr"));
     if (others.some((m) => keep[m.id!] === undefined)) return setError(t("ongoingChooseErr"));
     const stopIds = others.filter((m) => keep[m.id!] === false).map((m) => m.id!);
@@ -95,11 +97,22 @@ export function ListEditor({
             <p className="text-sm text-muted-foreground">{t("whichMeals")}</p>
             <div className="flex flex-wrap gap-2">
               {(["b", "l", "d"] as MealKey[]).map((k) => (
-                <Toggle key={k} on={r.meals.includes(k)} onClick={() => toggleMeal(i, k)}>
+                <Toggle key={k} on={!r.asNeeded && r.meals.includes(k)} onClick={() => update(i, { asNeeded: false, meals: toggled(r.meals, k) })}>
                   {CHILD_MEALS[lang][k]}
                 </Toggle>
               ))}
+              <Toggle on={r.asNeeded} onClick={() => update(i, { asNeeded: !r.asNeeded })}>
+                {t("asNeeded")}
+              </Toggle>
             </div>
+            {r.asNeeded ? (
+              <p className="text-xs text-muted-foreground">{t("asNeededNote")}</p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <Field id={`ends_${i}`} type="date" label={t("lastDay")} value={r.endsOn} onChange={(v) => update(i, { endsOn: v })} />
+                <p className="text-xs text-muted-foreground">{t("lastDayNote")}</p>
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">{t("food")}</p>
             <div className="flex flex-wrap gap-2">
               {(["before", "after", "any"] as Food[]).map((f) => (
@@ -124,8 +137,9 @@ export function ListEditor({
                 {r.name} {r.strength}
               </p>
               <p className="text-sm">
-                {r.quantity} · {r.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")} · {CHILD_FOOD[lang][r.food]}
+                {r.quantity} · {r.asNeeded ? t("asNeeded") : r.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")} · {CHILD_FOOD[lang][r.food]}
               </p>
+              {!r.asNeeded && r.endsOn ? <p className="text-sm">{t("until", { d: shortDate(r.endsOn, lang) })}</p> : null}
               <p className="text-xs text-muted-foreground">
                 {t("forWord")}: {r.purposeText || t("noPurpose")}
                 {r.purposeText && !r.purposeChanged && r.source === "suggested" ? ` (${t("suggested")})` : ""}
@@ -150,7 +164,7 @@ export function ListEditor({
             <div key={m.id} className="flex flex-col gap-2 border-t pt-3">
               <div>
                 <p className="font-mono font-medium">{`${m.name} ${m.strength}`.trim()}</p>
-                <p className="text-xs text-muted-foreground">{m.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
+                <p className="text-xs text-muted-foreground">{m.asNeeded ? t("asNeeded") : m.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
               </div>
               <div className="flex gap-2">
                 <Toggle on={keep[m.id!] === true} onClick={() => setKeep({ ...keep, [m.id!]: true })}>
@@ -196,13 +210,13 @@ function DuplicateNote({ flag, lang, t }: { flag: DuplicateFlag<Medicine>; lang:
   );
 }
 
-function Field({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (v: string) => void }) {
+function Field({ id, label, value, onChange, type = "text" }: { id: string; label: string; value: string; onChange: (v: string) => void; type?: "text" | "date" }) {
   return (
     <div className="flex flex-col gap-1">
       <Label htmlFor={id} className="text-xs text-muted-foreground">
         {label}
       </Label>
-      <Input id={id} className="h-11 text-base" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input id={id} type={type} className="h-11 text-base" value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

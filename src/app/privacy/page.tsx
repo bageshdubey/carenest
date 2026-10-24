@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BackLink } from "@/components/app/back-link";
 import { LogoMark } from "@/components/app/illustrations";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 
@@ -28,6 +29,7 @@ export default function PrivacyPage() {
 
       <article className="flex flex-col gap-6 text-[16px] leading-relaxed [&_h2]:mt-2 [&_h2]:text-xl [&_h2]:font-bold [&_li]:ml-5 [&_li]:list-disc [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-1.5">
         <div className="flex flex-col gap-2">
+          <BackLink href="/" label="Back" />
           <h1 className="text-3xl font-bold">Privacy policy</h1>
           <p className="text-sm text-muted-foreground">Last updated {UPDATED}</p>
         </div>
