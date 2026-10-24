@@ -15,7 +15,8 @@ export function GoogleButton({ label }: { label: string }) {
         setBusy(true);
         await supabaseBrowser().auth.signInWithOAuth({
           provider: "google",
-          options: { redirectTo: `${window.location.origin}/auth/callback` },
+          // Always show Google's account list, so people with several Gmails pick one.
+          options: { redirectTo: `${window.location.origin}/auth/callback`, queryParams: { prompt: "select_account" } },
         });
       }}
     >
