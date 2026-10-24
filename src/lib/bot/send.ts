@@ -3,7 +3,7 @@ import type { FamilyRow } from "@/lib/db/rows";
 import { addAlert, logMessage } from "@/lib/db/repo";
 import { speak } from "@/lib/ai/sarvam";
 import { VOICE_NOTE_MAX_BYTES, toVoiceNote } from "@/lib/audio";
-import { type Button, OUTSIDE_WINDOW, WhatsAppError, sendButtons, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
+import { type Button, sendButtons, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
 import type { ChildLang, MealKey } from "@/lib/domain/types";
 import { pm } from "@/lib/i18n/parent";
 
@@ -12,7 +12,7 @@ const BUTTON_BODY_MAX = 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** WhatsApp lets us send free messages, voice included, only within 24 hours of the parent's last message. */
-function inWindow(family: FamilyRow): boolean {
+export function inWindow(family: FamilyRow): boolean {
   return !!family.last_parent_message_at && Date.now() - new Date(family.last_parent_message_at).getTime() < DAY_MS;
 }
 
@@ -58,24 +58,26 @@ export async function toParent(family: FamilyRow, body: string, buttons: Button[
 }
 
 /**
- * Reminders are often sent more than 24 hours after the parent last wrote.
- * WhatsApp then only allows an approved template, so fall back to one when configured.
+ * Reminders are often sent more than 24 hours after the parent last wrote. WhatsApp then allows only
+ * an approved template, and it reports a refused free message later rather than at once, so the
+ * choice is made here from the time of the parent's last message. The template's Taken and Later
+ * buttons send the same codes as the normal reminder's.
+ * Returns false when the reminder could not go: the window is closed and no template is set.
  */
-export async function reminderToParent(family: FamilyRow, body: string, buttons: Button[], templateParams: string[]) {
-  try {
-    return await toParent(family, body, buttons);
-  } catch (e) {
-    const template = process.env.WHATSAPP_TEMPLATE_REMINDER;
-    if (e instanceof WhatsAppError && e.code === OUTSIDE_WINDOW && template) {
-      const id = await sendTemplate(family.parent_phone, template, family.parent_lang === "en" ? "en" : family.parent_lang, templateParams);
-      await logMessage(family.id, "out", body, null, id);
-      return id;
-    }
-    throw e;
+export async function reminderToParent(family: FamilyRow, body: string, buttons: Button[], templateParams: string[]): Promise<boolean> {
+  if (inWindow(family)) {
+    await toParent(family, body, buttons);
+    return true;
   }
+  const template = process.env.WHATSAPP_TEMPLATE_REMINDER;
+  if (!template) return false;
+  const payloads = buttons.map((b) => b.id).filter((id) => id.startsWith("taken:") || id.startsWith("later:"));
+  const id = await sendTemplate(family.parent_phone, template, family.parent_lang, templateParams, payloads);
+  await logMessage(family.id, "out", body, null, id);
+  return true;
 }
 
-type AlertKind = "new_list" | "dose_missed" | "report_out_of_range" | "advice_question" | "emergency" | "course_ended";
+type AlertKind = "new_list" | "dose_missed" | "report_out_of_range" | "advice_question" | "emergency" | "course_ended" | "reminder_not_sent";
 
 const ALERT_TEXT: Record<ChildLang, Record<AlertKind, string>> = {
   en: {
@@ -85,6 +87,7 @@ const ALERT_TEXT: Record<ChildLang, Record<AlertKind, string>> = {
     advice_question: 'CareNest: {n} asked "{q}". They were told to ask the doctor or call you.',
     emergency: 'CareNest URGENT: {n} wrote "{q}". Please call now: +{p}',
     course_ended: "CareNest: {n}'s course of {m} has ended. Reminders for it have stopped.",
+    reminder_not_sent: "CareNest: Reminders can't reach {n} on WhatsApp: no message from them in 24 hours. Ask them to send any message to CareNest.",
   },
   hi: {
     new_list: "CareNest: {n} ने नया पर्चा भेजा है। कृपया सूची जाँचें: {url}",
@@ -93,6 +96,7 @@ const ALERT_TEXT: Record<ChildLang, Record<AlertKind, string>> = {
     advice_question: 'CareNest: {n} ने पूछा "{q}"। उन्हें डॉक्टर से पूछने या आपको फ़ोन करने को कहा गया।',
     emergency: 'CareNest तुरंत: {n} ने लिखा "{q}"। कृपया अभी फ़ोन करें: +{p}',
     course_ended: "CareNest: {n} की {m} का कोर्स पूरा हो गया है। इसकी याद दिलाना बंद कर दिया गया है।",
+    reminder_not_sent: "CareNest: {n} तक WhatsApp पर याद नहीं पहुँच रही: 24 घंटे से उनका कोई संदेश नहीं आया। उनसे CareNest को कोई भी संदेश भेजने को कहें।",
   },
 };
 

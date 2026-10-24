@@ -54,19 +54,17 @@ export function sendButtons(to: string, body: string, buttons: Button[]) {
   });
 }
 
-/** Pre-approved template, for messages we start outside the 24-hour window. */
-export function sendTemplate(to: string, name: string, languageCode: string, bodyParams: string[]) {
-  return post({
-    to,
-    type: "template",
-    template: {
-      name,
-      language: { code: languageCode },
-      components: bodyParams.length
-        ? [{ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text })) }]
-        : [],
-    },
-  });
+/**
+ * Pre-approved template, for messages we start outside the 24-hour window.
+ * `buttonPayloads` are what the template's quick-reply buttons send back, in button order.
+ */
+export function sendTemplate(to: string, name: string, languageCode: string, bodyParams: string[], buttonPayloads: string[] = []) {
+  const components: Record<string, unknown>[] = [];
+  if (bodyParams.length) components.push({ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text })) });
+  buttonPayloads.forEach((payload, i) =>
+    components.push({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload }] }),
+  );
+  return post({ to, type: "template", template: { name, language: { code: languageCode }, components } });
 }
 
 /** Uploads a file to WhatsApp and returns its media id, for sending as a message. */

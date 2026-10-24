@@ -19,7 +19,7 @@ import { mealTimes } from "@/lib/db/rows";
 import { MISSED_AFTER_MIN, doseStep, dueReminders, istNow, medicinesFor, toMinutes } from "@/lib/domain/meals";
 import type { MealKey, Medicine } from "@/lib/domain/types";
 import { doctorQuestions, mealName, pm, reminderLines, visitText } from "@/lib/i18n/parent";
-import { alertChild, reminderToParent, toParent } from "./send";
+import { alertChild, inWindow, reminderToParent, toParent } from "./send";
 
 /**
  * Runs every few minutes (called by Supabase pg_cron):
@@ -49,9 +49,11 @@ export async function tick(now: Date = new Date()) {
     const due = dueReminders(mealTimes(family), meds, await mealsSentToday(family.id, date), now);
     for (const meal of due) {
       try {
-        await sendMealReminder(family, date, meal, meds);
+        const delivered = await sendMealReminder(family, date, meal, meds);
+        // Recorded either way, so a reminder that could not go is not tried again every few minutes.
         await recordReminder(family.id, date, meal);
-        sent++;
+        if (delivered) sent++;
+        else await alertChild(family, "reminder_not_sent", { meal });
       } catch (e) {
         console.error(`Reminder failed for family ${family.id} meal ${meal}`, e);
       }
@@ -77,7 +79,8 @@ export async function tick(now: Date = new Date()) {
       } else if (step === "resend" && family && (await claimResend(dose.id, now))) {
         const meds = await activeMedicines(family.id);
         if (medicinesFor(dose.meal, meds).length) await sendMealReminder(family, dose.dose_date, dose.meal, meds);
-      } else if (step === "followup" && family && (await claimFollowup(dose.id, now))) {
+      } else if (step === "followup" && family && inWindow(family) && (await claimFollowup(dose.id, now))) {
+        // Outside the 24-hour window a free follow-up would be refused, so none goes.
         const lang = family.parent_lang;
         await toParent(family, pm(lang, "followup", { n: family.parent_call_name, meal: mealName(lang, dose.meal) }), [
           { id: `taken:${dose.dose_date}:${dose.meal}`, title: pm(lang, "q_taken") },
@@ -91,8 +94,11 @@ export async function tick(now: Date = new Date()) {
   return { sent, missed };
 }
 
-/** The meal reminder, with Taken, Later and My full list. Used for the first send and after "Later". */
-async function sendMealReminder(family: FamilyRow, date: string, meal: MealKey, meds: Medicine[]) {
+/**
+ * The meal reminder, with Taken, Later and My full list. Used for the first send and after "Later".
+ * False when it could not go (outside the 24-hour window with no template).
+ */
+async function sendMealReminder(family: FamilyRow, date: string, meal: MealKey, meds: Medicine[]): Promise<boolean> {
   const lang = family.parent_lang;
   const body = pm(lang, "reminder", {
     meal: mealName(lang, meal),
@@ -103,7 +109,7 @@ async function sendMealReminder(family: FamilyRow, date: string, meal: MealKey, 
   const oneLine = medicinesFor(meal, meds)
     .map((m) => `${m.name} ${m.strength}`)
     .join(", ");
-  await reminderToParent(
+  return reminderToParent(
     family,
     body,
     [
