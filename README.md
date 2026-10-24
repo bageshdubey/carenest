@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CareNest
 
-## Getting Started
+**A WhatsApp health companion for elders on several medicines.** The son or daughter sets it up once on a web app. The parent only uses WhatsApp: they send a photo of the prescription and get their tablets back by meal, a reminder at every meal, and plain answers about their own list and reports.
 
-First, run the development server:
+CareNest analyses, it never advises. Every reply comes from the parent's own prescription and reports, never from the AI's opinion.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+**Live app:** https://carenestapp.vercel.app
+**Status:** Runs on the WhatsApp test number. Hindi and Marathi texts are drafts and still need a native speaker's check.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Contents
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- [How it works](#how-it-works)
+- [What the parent gets on WhatsApp](#what-the-parent-gets-on-whatsapp)
+- [What the child sees on the web app](#what-the-child-sees-on-the-web-app)
+- [Safety rules](#safety-rules)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it works
 
-## Learn More
+1. **The child sets up** on the web app with Google login: the parent's name, WhatsApp number, language and meal times.
+2. **The child shares a link** with the parent. The parent taps it and sends the prefilled message, which links their number.
+3. **The parent sends a prescription photo** on WhatsApp. Gemini reads the medicines.
+4. **The child checks the list** on the web app and approves it. Nothing is reminded until the child approves.
+5. **Reminders go at every meal** with a "Taken" button. A dose not marked within 60 minutes shows on the child's dashboard.
+6. **Lab reports, questions and doctor visits** follow the same path: the parent sends, CareNest compares with what is printed, the child sees everything.
 
-To learn more about Next.js, take a look at the following resources:
+## What the parent gets on WhatsApp
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Their tablets by meal:** breakfast, lunch and dinner, before or after food.
+- **A reminder at each meal**, with "Taken" and "My full list" buttons.
+- **Answers about their own list**, typed or by voice note: "What do I take at lunch?", "How many medicines?".
+- **A short report summary:** how many results are inside, outside or without a printed range, and only the ones outside it, with what each test is.
+- **Questions to ask the doctor**, built from results outside the range. Questions only, never answers.
+- **Doctor visit reminders:** the evening before and the morning of the visit.
+- **A voice note** in English, Hindi or Marathi with each reply (Sarvam), when the parent has written in the last 24 hours.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## What the child sees on the web app
 
-## Deploy on Vercel
+- **Home:** today's doses by meal and the next dose time, doses taken by week or month, ongoing medicines, the next doctor visit and the latest report in one line.
+- **Medicines:** the ongoing list on top, then every prescription since the first, newest first, with who sent it, when, and which medicines are ongoing or stopped.
+- **Reports:** by test, with earlier values and higher or lower than last time; or by date, one folded card per report.
+- **Chat:** every message between the parent and CareNest.
+- **Alerts:** a new prescription to check, a dose not marked, results outside range, an advice question, an emergency.
+- **Settings:** meal times, languages and the parent's number.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Safety rules
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+These are built into the code, not left to the AI.
+
+- **Fixed replies.** Every message to the parent is written. The AI only reads photos and works out what kind of question was asked. The one exception is a short answer about the parent's own medicines, taken from their list only.
+- **Ranges are compared in code.** A result is "high" or "low" only against the range printed on the report.
+- **Emergency words are checked in code** in English, Hindi and Marathi before anything else. The parent is told to call their child or 108, and the child gets an urgent alert.
+- **Advice questions are not answered.** Dose changes, symptoms or substitutes get "please ask your doctor", and the child is told.
+- **The child approves every list** before any reminder goes.
+- **No brand is matched to a generic.** That is a substitute decision, which CareNest never makes.
+- **CareNest never asks for money, OTP or passwords, and never sends links** to the parent.

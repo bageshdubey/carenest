@@ -4,7 +4,7 @@ Steps to get CareNest running. Secrets go in `.env.local` (on your laptop) and i
 
 ## 1. Supabase (database, login, photos)
 1. supabase.com > New project `carenest`, region Mumbai (ap-south-1).
-2. SQL Editor > New query > paste all of `supabase/migrations/0001_init.sql` > Run.
+2. SQL Editor > New query > paste each file in `supabase/migrations/` in order, `0001` to `0006`, and Run each one. Later changes come as new numbered files: run each new one once, in order.
 3. Project Settings > API: copy the Project URL, the `anon` key and the `service_role` key into `.env.local`.
 
 ## 2. Google login
@@ -32,7 +32,7 @@ cp .env.example .env.local
 npm install
 npm run dev
 ```
-Open http://localhost:3000. WhatsApp can't reach your laptop, so the bot is tested once the app is on Vercel.
+Open http://localhost:3000. The web app works fully here, and messages the app sends to the parent go out from your laptop. WhatsApp can't reach your laptop, so bot replies and reminders are tested once the change is merged and live on Vercel. Your laptop uses the real database, so test with a test parent number, not a real family.
 
 ## 6. Scheduler (after it is live on Vercel)
 1. Make up a long random `CRON_SECRET` and add it to Vercel.
