@@ -256,6 +256,7 @@ Then pick one intent:
 - greeting: hello, thanks, ok.
 - other: anything else.
 Only for about_my_medicines, write "answer" using only the list given. If the list does not have it, use intent other.
+In Hindi or Marathi, if the answer says "I" for CareNest, use feminine forms (करती हूँ, सकती हूँ; करते, शकते): the voice is a woman's.
 Never give advice, a diagnosis or an opinion.`;
 
 /** Strips codec details: WhatsApp sends "audio/ogg; codecs=opus", Gemini wants "audio/ogg". */

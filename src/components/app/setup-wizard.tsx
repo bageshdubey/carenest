@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Play, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { createFamily } from "@/app/actions";
@@ -9,13 +10,15 @@ import { Label } from "@/components/ui/label";
 import { mealsInOrder } from "@/lib/domain/meals";
 import type { ChildLang, MealKey, ParentLang } from "@/lib/domain/types";
 import { CHILD_MEALS, makeT } from "@/lib/i18n/child";
+import { pm } from "@/lib/i18n/parent";
+import { ClockIllo, FamilyIllo, IlloPanel, PhoneIllo, RxIllo } from "./illustrations";
 import { PhotoUpload } from "./photo-upload";
 
 const CALL_NAMES = ["Amma", "Papa", "Mummy", "Aai", "Baba"];
 const PARENT_LANGS: [ParentLang, string][] = [
   ["en", "English"],
-  ["hi", "हिंदी (Hindi)"],
-  ["mr", "मराठी (Marathi)"],
+  ["hi", "हिंदी"],
+  ["mr", "मराठी"],
 ];
 const TOTAL = 4;
 
@@ -25,10 +28,24 @@ function Chip({ on, children, onClick }: { on: boolean; children: React.ReactNod
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`rounded-full border px-4 py-2 text-[15px] ${on ? "border-primary bg-brand-soft font-bold" : "border-border bg-card"}`}
+      className={`min-h-12 rounded-full px-[18px] text-[17px] ${on ? "border-2 border-primary bg-brand-soft font-bold text-primary" : "border-[1.5px] border-border bg-card"}`}
     >
       {children}
     </button>
+  );
+}
+
+/** Four bars, filled up to this step, with "Step 2 of 4" under them. */
+function Progress({ step, label }: { step: number; label: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-4 gap-1.5" aria-hidden="true">
+        {Array.from({ length: TOTAL }, (_, i) => (
+          <span key={i} className={`h-1.5 rounded-full ${i < step ? "bg-primary" : "bg-border"}`} />
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">{label}</p>
+    </div>
   );
 }
 
@@ -74,11 +91,17 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
   if (step === 5) {
     return (
       <div className="flex flex-1 flex-col gap-4">
-        <h1 className="text-2xl leading-tight font-bold">{t("photosQ")}</h1>
-        <p className="text-muted-foreground">{t("photosSub")}</p>
-        <div className="mt-auto flex flex-col gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-bold text-primary">
+          <Check className="size-4" aria-hidden /> {t("setupSaved")}
+        </p>
+        <IlloPanel className="h-44">
+          <RxIllo />
+        </IlloPanel>
+        <h1 className="text-[28px] leading-tight font-bold">{t("photosQ")}</h1>
+        <p className="text-[17px] leading-relaxed text-muted-foreground">{t("photosSub")}</p>
+        <div className="mt-auto flex flex-col gap-2.5">
           <PhotoUpload label={t("addPhoto")} readingText={t("reading")} errorText={t("readErr")} onDone={() => router.push("/check")} />
-          <Button variant="outline" size="lg" className="h-12 rounded-xl" onClick={() => router.refresh()}>
+          <Button variant="outline" size="lg" className="h-13 rounded-2xl text-[17px]" onClick={() => router.refresh()}>
             {t("skip")}
           </Button>
         </div>
@@ -88,13 +111,18 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <p className="font-mono text-xs text-muted-foreground">{t("step", { a: step, b: TOTAL })}</p>
+      <Progress step={step} label={t("step", { a: step, b: TOTAL })} />
 
       {step === 1 && (
         <>
+          <IlloPanel>
+            <FamilyIllo />
+          </IlloPanel>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="childName">{t("yourName")}</Label>
-            <Input id="childName" className="h-12 text-base" value={childName} onChange={(e) => setChildName(e.target.value)} />
+            <Label htmlFor="childName" className="font-bold text-muted-foreground">
+              {t("yourName")}
+            </Label>
+            <Input id="childName" className="h-13 rounded-2xl bg-card text-lg" value={childName} onChange={(e) => setChildName(e.target.value)} />
           </div>
           <h1 className="text-2xl leading-tight font-bold">{t("callQ")}</h1>
           <div className="flex flex-wrap gap-2">
@@ -104,51 +132,72 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
               </Chip>
             ))}
           </div>
-          {call === "Other" && <Input id="other" className="h-12 text-base" placeholder={t("otherPlaceholder")} value={other} onChange={(e) => setOther(e.target.value)} />}
-          <p className="text-muted-foreground">{t("callSub")}</p>
+          {call === "Other" && (
+            <Input id="other" className="h-13 rounded-2xl bg-card text-lg" placeholder={t("otherPlaceholder")} aria-label={t("callQ")} value={other} onChange={(e) => setOther(e.target.value)} />
+          )}
+          <p className="text-sm text-muted-foreground">{t("callSub")}</p>
         </>
       )}
 
       {step === 2 && (
         <>
-          <h1 className="text-2xl leading-tight font-bold">{t("parentNumberQ")}</h1>
-          <PhoneInput id="parentPhone" value={parentPhone} onChange={setParentPhone} />
-          <p className="text-muted-foreground">{t("parentNumberSub")}</p>
+          <IlloPanel>
+            <PhoneIllo />
+          </IlloPanel>
+          <h1 className="text-[28px] leading-tight font-bold">{t("parentNumberQ")}</h1>
+          <PhoneInput id="parentPhone" label={t("parentNumberQ")} value={parentPhone} onChange={setParentPhone} />
+          <div className="flex items-start gap-3 rounded-2xl bg-card p-4">
+            <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+            <p className="text-[15px] leading-relaxed">
+              {t("parentNumberSub")} {t("numUse")}
+            </p>
+          </div>
         </>
       )}
 
       {step === 3 && (
         <>
-          <h1 className="text-2xl leading-tight font-bold">{t("langQ")}</h1>
-          <p className="text-sm text-muted-foreground">{t("langYou")}</p>
-          <div className="flex flex-wrap gap-2">
-            <Chip on={childLang === "en"} onClick={() => setChildLang("en")}>
-              English
-            </Chip>
-            <Chip on={childLang === "hi"} onClick={() => setChildLang("hi")}>
-              हिंदी (Hindi)
-            </Chip>
-          </div>
-          <p className="text-sm text-muted-foreground">{t("langParent")}</p>
-          <div className="flex flex-wrap gap-2">
-            {PARENT_LANGS.map(([code, label]) => (
-              <Chip key={code} on={parentLang === code} onClick={() => setParentLang(code)}>
-                {label}
+          <h1 className="text-[26px] leading-tight font-bold">{t("langQ")}</h1>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-bold text-muted-foreground">{t("langYou")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Chip on={childLang === "en"} onClick={() => setChildLang("en")}>
+                English
               </Chip>
-            ))}
+              <Chip on={childLang === "hi"} onClick={() => setChildLang("hi")}>
+                हिंदी
+              </Chip>
+            </div>
           </div>
-          <p className="text-muted-foreground">{t("langNote")}</p>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-bold text-muted-foreground">{t("langParent")}</p>
+            <div className="flex flex-wrap gap-2">
+              {PARENT_LANGS.map(([code, label]) => (
+                <Chip key={code} on={parentLang === code} onClick={() => setParentLang(code)}>
+                  {label}
+                </Chip>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-bold text-muted-foreground">{t("firstMsg")}</p>
+            <WelcomePreview text={pm(parentLang, "welcome", { n: callName || "Amma", c: childName.trim() || "…" })} lang={parentLang} />
+          </div>
+          <p className="text-sm text-muted-foreground">{t("langNote")}</p>
         </>
       )}
 
       {step === 4 && (
         <>
-          <h1 className="text-2xl leading-tight font-bold">{t("mealsQ")}</h1>
-          <p className="text-muted-foreground">{t("mealsSub")}</p>
+          <IlloPanel>
+            <ClockIllo />
+          </IlloPanel>
+          <h1 className="text-[28px] leading-tight font-bold">{t("mealsQ")}</h1>
+          <p className="text-[17px] leading-relaxed text-muted-foreground">{t("mealsSub")}</p>
           <div className="rounded-2xl bg-card px-4">
             {(["b", "l", "d"] as MealKey[]).map((k) => (
               <div key={k} className="flex items-center justify-between border-b py-3 last:border-0">
-                <Label htmlFor={`meal_${k}`} className="text-base">
+                <Label htmlFor={`meal_${k}`} className="text-[17px]">
                   {CHILD_MEALS[childLang][k]}
                 </Label>
                 <input
@@ -156,7 +205,7 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
                   type="time"
                   value={meals[k]}
                   onChange={(e) => setMeals({ ...meals, [k]: e.target.value })}
-                  className="rounded-lg border bg-background px-2 py-1.5 font-mono"
+                  className="rounded-xl border-[1.5px] bg-background px-2.5 py-2 font-mono text-[17px]"
                 />
               </div>
             ))}
@@ -165,18 +214,18 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
       )}
 
       {error ? (
-        <p role="alert" className="text-sm text-bad">
+        <p role="alert" className="rounded-xl bg-bad-soft px-3 py-2.5 text-[15px] text-bad">
           {error}
         </p>
       ) : null}
 
-      <div className="mt-auto flex gap-2">
+      <div className="mt-auto flex gap-2.5 pt-2">
         {step > 1 && (
-          <Button variant="outline" size="lg" className="h-12 flex-1 rounded-xl" onClick={() => setStep(step - 1)} disabled={saving}>
+          <Button variant="outline" size="lg" className="h-13 flex-1 rounded-2xl text-[17px]" onClick={() => setStep(step - 1)} disabled={saving}>
             {t("back")}
           </Button>
         )}
-        <Button size="lg" className="h-12 flex-[2] rounded-xl text-base font-bold" onClick={next} disabled={saving}>
+        <Button size="lg" className="h-13 flex-[2] rounded-2xl text-[17px] font-bold" onClick={next} disabled={saving}>
           {t("next")}
         </Button>
       </div>
@@ -184,11 +233,37 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
   );
 }
 
-function PhoneInput({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+/** What the parent's first WhatsApp will look like: a voice note, then the welcome text. */
+function WelcomePreview({ text, lang }: { text: string; lang: ParentLang }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl bg-[#ece5dd] p-3 dark:bg-muted">
+      <div className="flex w-52 items-center gap-2.5 rounded-2xl rounded-bl-sm bg-card px-3 py-2" aria-hidden="true">
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary">
+          <Play className="size-3.5 fill-primary-foreground text-primary-foreground" />
+        </span>
+        <span className="h-1 flex-1 rounded-full bg-[linear-gradient(90deg,var(--primary)_30%,var(--border)_30%)]" />
+      </div>
+      <p lang={lang} className="max-w-[300px] rounded-2xl rounded-bl-sm bg-card px-3 py-2.5 text-[15px] leading-relaxed">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function PhoneInput({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="rounded-lg border bg-card px-3 py-3 font-mono">+91</span>
-      <Input id={id} inputMode="numeric" autoComplete="tel-national" className="h-12 text-base" placeholder="98765 43210" value={value} onChange={(e) => onChange(e.target.value)} />
+      <span className="grid h-13 place-items-center rounded-2xl border-[1.5px] bg-card px-3.5 text-lg">+91</span>
+      <Input
+        id={id}
+        aria-label={label}
+        inputMode="numeric"
+        autoComplete="tel-national"
+        className="h-13 rounded-2xl bg-card text-lg"
+        placeholder="98765 43210"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }
