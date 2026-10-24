@@ -1,5 +1,6 @@
 import { Bell, FileText, House, MessageCircle, Pill as PillIcon, Settings, Siren } from "lucide-react";
 import Link from "next/link";
+import { connection } from "next/server";
 import { dismissAlert } from "@/app/actions";
 import { Card, CardHead, FlagPill, MonthGrid, Pill, RangeBar, Ring, WeekBars } from "@/components/app/dashboard";
 import { CopyButton } from "@/components/app/copy-button";
@@ -46,6 +47,8 @@ function GotIt({ id, label }: { id: string; label: string }) {
 }
 
 export default async function HomePage({ searchParams }: PageProps<"/home">) {
+  // Render only for the real request: the login check and today's date both read the current time.
+  await connection();
   const { supabase, family } = await requireFamily();
   const sp = await searchParams;
   const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "home";
