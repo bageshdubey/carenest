@@ -196,6 +196,9 @@ const UI = {
     emptyBody: "{n} can send a photo on WhatsApp, or you can add it here. Reminders start after you approve the list.",
     themeToggle: "Light or dark mode",
     privacy: "Privacy policy",
+    videoLabel: "26-second video: how CareNest works",
+    pauseVideo: "Pause the video",
+    playVideo: "Play the video",
   },
   hi: {
     google: "Google से आगे बढ़ें",
@@ -391,6 +394,9 @@ const UI = {
     emptyBody: "{n} WhatsApp पर फ़ोटो भेज सकते हैं, या आप यहाँ जोड़ सकते हैं। सूची मंज़ूर करने के बाद याद दिलाना शुरू होगा।",
     themeToggle: "लाइट या डार्क मोड",
     privacy: "गोपनीयता नीति",
+    videoLabel: "26 सेकंड का वीडियो: CareNest कैसे काम करता है",
+    pauseVideo: "वीडियो रोकें",
+    playVideo: "वीडियो चलाएँ",
   },
 } as const;
 
