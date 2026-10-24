@@ -4,7 +4,7 @@ Steps to get CareNest running. Secrets go in `.env.local` (on your laptop) and i
 
 ## 1. Supabase (database, login, photos)
 1. supabase.com > New project `carenest`, region Mumbai (ap-south-1).
-2. SQL Editor > New query > paste each file in `supabase/migrations/` in order, `0001` to `0006`, and Run each one. Later changes come as new numbered files: run each new one once, in order.
+2. SQL Editor > New query > paste each file in `supabase/migrations/` in order, `0001` to `0008`, and Run each one. Later changes come as new numbered files: run each new one once, in order.
 3. Project Settings > API: copy the Project URL, the `anon` key and the `service_role` key into `.env.local`.
 
 ## 2. Google login
