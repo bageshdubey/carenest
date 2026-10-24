@@ -86,6 +86,12 @@ export default async function Landing({ searchParams }: PageProps<"/">) {
           </section>
         </div>
       </div>
+
+      <footer className="pt-8 text-center text-sm text-muted-foreground">
+        <Link href="/privacy" className="underline">
+          {t("privacy")}
+        </Link>
+      </footer>
     </main>
   );
 }

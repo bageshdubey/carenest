@@ -195,6 +195,7 @@ const UI = {
     emptyTitle: "Waiting for {n}'s prescription",
     emptyBody: "{n} can send a photo on WhatsApp, or you can add it here. Reminders start after you approve the list.",
     themeToggle: "Light or dark mode",
+    privacy: "Privacy policy",
   },
   hi: {
     google: "Google से आगे बढ़ें",
@@ -389,6 +390,7 @@ const UI = {
     emptyTitle: "{n} के पर्चे का इंतज़ार",
     emptyBody: "{n} WhatsApp पर फ़ोटो भेज सकते हैं, या आप यहाँ जोड़ सकते हैं। सूची मंज़ूर करने के बाद याद दिलाना शुरू होगा।",
     themeToggle: "लाइट या डार्क मोड",
+    privacy: "गोपनीयता नीति",
   },
 } as const;
 
