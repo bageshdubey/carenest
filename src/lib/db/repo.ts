@@ -1,4 +1,5 @@
 import "server-only";
+import { LATER_MIN, MAX_LATER, type OpenDose } from "@/lib/domain/meals";
 import type { MealKey, Medicine, ReportValue } from "@/lib/domain/types";
 import { admin } from "./admin";
 import { type FamilyRow, type MedicineRow, type ReportValueRow, type VisitRow, fromMedicine, toMedicine, toReportValue } from "./rows";
@@ -219,14 +220,52 @@ export async function markTaken(familyId: string, date: string, meal: MealKey): 
   return rows.length > 0;
 }
 
-export async function openDoses(): Promise<{ id: string; family_id: string; dose_date: string; meal: MealKey; sent_at: string }[]> {
-  return must(await admin().from("doses").select("id,family_id,dose_date,meal,sent_at").eq("status", "sent")) as {
-    id: string;
-    family_id: string;
-    dose_date: string;
-    meal: MealKey;
-    sent_at: string;
-  }[];
+export type OpenDoseRow = OpenDose & { id: string; family_id: string; dose_date: string; meal: MealKey };
+
+export async function openDoses(): Promise<OpenDoseRow[]> {
+  return must(
+    await admin().from("doses").select("id,family_id,dose_date,meal,sent_at,reminded_at,later_until,followup_at").eq("status", "sent"),
+  ) as OpenDoseRow[];
+}
+
+/**
+ * The parent tapped "Later": the reminder comes again in 30 minutes, at most twice.
+ * "closed" when the dose is already taken or not marked, "limit" after two Laters.
+ */
+export async function putOffDose(familyId: string, date: string, meal: MealKey, now: Date): Promise<{ result: "later"; until: Date } | { result: "limit" | "closed" }> {
+  const dose = must(
+    await admin().from("doses").select("id,status,later_count").eq("family_id", familyId).eq("dose_date", date).eq("meal", meal).maybeSingle(),
+  ) as { id: string; status: string; later_count: number } | null;
+  if (!dose || dose.status !== "sent") return { result: "closed" };
+  if (dose.later_count >= MAX_LATER) return { result: "limit" };
+  const until = new Date(now.getTime() + LATER_MIN * 60_000);
+  must(await admin().from("doses").update({ later_count: dose.later_count + 1, later_until: until.toISOString() }).eq("id", dose.id).eq("status", "sent"));
+  return { result: "later", until };
+}
+
+/**
+ * Claims a due "Later" before the reminder goes again, so two overlapping runs never send it twice.
+ * The resend starts a new hour: follow-up and "not marked" count from it.
+ */
+export async function claimResend(doseId: string, now: Date): Promise<boolean> {
+  const rows = must(
+    await admin()
+      .from("doses")
+      .update({ later_until: null, reminded_at: now.toISOString(), followup_at: null })
+      .eq("id", doseId)
+      .eq("status", "sent")
+      .not("later_until", "is", null)
+      .select("id"),
+  ) as { id: string }[];
+  return rows.length > 0;
+}
+
+/** Claims the one follow-up before it is sent. */
+export async function claimFollowup(doseId: string, now: Date): Promise<boolean> {
+  const rows = must(
+    await admin().from("doses").update({ followup_at: now.toISOString() }).eq("id", doseId).eq("status", "sent").is("followup_at", null).select("id"),
+  ) as { id: string }[];
+  return rows.length > 0;
 }
 
 export async function markMissed(doseId: string) {
