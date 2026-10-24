@@ -98,6 +98,9 @@ export type EditedMedicine = {
   food: Food;
   purposeText: string;
   purposeChanged: boolean;
+  /** Last day, "YYYY-MM-DD", or empty for no end. */
+  endsOn: string;
+  asNeeded: boolean;
 };
 
 /**
@@ -110,7 +113,8 @@ export type EditedMedicine = {
 export async function saveList(mode: "pending" | "active", prescriptionId: string | null, meds: EditedMedicine[], stopIds: string[] = []): Promise<ActionResult> {
   const { supabase, family } = await requireFamily();
   const clean = meds.filter((m) => m.name.trim());
-  if (clean.some((m) => m.meals.length === 0)) return { ok: false, error: "meals" };
+  if (clean.some((m) => !m.asNeeded && m.meals.length === 0)) return { ok: false, error: "meals" };
+  if (clean.some((m) => m.endsOn && !ISO_DATE.test(m.endsOn))) return { ok: false, error: "endsOn" };
 
   const scope =
     mode === "pending" && prescriptionId
@@ -137,10 +141,12 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
       name: m.name.trim(),
       strength: m.strength.trim(),
       quantity: m.quantity.trim() || "1 tablet",
-      meals: m.meals,
+      meals: m.asNeeded ? [] : m.meals,
       food: m.food,
       needs_check: false,
       active: true,
+      ends_on: m.asNeeded ? null : m.endsOn || null,
+      as_needed: m.asNeeded,
     };
     if (m.purposeChanged) {
       const t = m.purposeText.trim();

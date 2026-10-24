@@ -1,6 +1,7 @@
 import { ApiError, FinishReason, GoogleGenAI, type GenerateContentParameters, type Part } from "@google/genai";
 import * as z from "zod/v4";
 import { shiftDate } from "@/lib/domain/adherence";
+import { courseEnd, courseEnded } from "@/lib/domain/course";
 import { istNow } from "@/lib/domain/meals";
 import { flagValue, parseRange } from "@/lib/domain/report";
 import type { Food, MealKey, Medicine, ParentLang, ReportValue } from "@/lib/domain/types";
@@ -85,6 +86,7 @@ const DocumentSchema = z.object({
     .object({
       doctor: z.string().nullable(),
       date: z.string().nullable(),
+      date_iso: z.string().nullable().describe("The prescription date as YYYY-MM-DD, if written. Null if not written or unclear."),
       medicines: z.array(
         z.object({
           name: z.string().describe("Medicine or brand name exactly as written."),
@@ -94,6 +96,11 @@ const DocumentSchema = z.object({
           afternoon: z.boolean(),
           night: z.boolean(),
           food: z.enum(["before", "after", "any", "unknown"]),
+          days: z
+            .number()
+            .nullable()
+            .describe('How many days to take it, only if written for this line or for the whole slip ("x 7 days", "for 5 days", "1 week" is 7). Null if not written or "continue".'),
+          as_needed: z.boolean().describe('True if it is taken only when needed: "SOS", "PRN", "as needed", "if pain", "if fever", "when required".'),
           purpose_written: Tri.nullable().describe("Only if the prescription itself says what it is for. Short, plain words, in English, Hindi and Marathi."),
           purpose_general: Tri.nullable().describe("What this medicine is generally used for, 1 to 3 plain words. Null if unsure."),
           unclear: z.boolean().describe("True if any part of this line was hard to read."),
@@ -142,6 +149,8 @@ export type ReadResult =
 const READ_SYSTEM = `You read photos of Indian prescriptions and lab reports for an app that helps older people.
 Copy what is written. Do not guess medicine names: if a name is hard to read, give your best reading and set unclear to true.
 Map timings: morning or 1-0-0 to morning, afternoon or 0-1-0 to afternoon, night, bedtime or 0-0-1 to night. "BD" means morning and night. "TDS" means morning, afternoon and night. "OD" means once a day; use morning unless the slip says otherwise.
+A medicine taken only when needed ("SOS", "PRN", "as needed", "if pain") gets as_needed true and no morning, afternoon or night.
+Copy how many days only if it is written; never work out a course length yourself.
 For lab reports, copy each test, its value and the reference range printed on the report. Never say whether a value is good or bad.
 If the document says when to come back (follow-up, review, next visit, "SOS" does not count), fill follow_up. Otherwise set it to null.
 Never add advice, diagnosis or instructions that are not on the document.`;
@@ -190,9 +199,15 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
   if (!doc || !doc.readable) return { type: "unreadable" };
 
   if (doc.document_type === "prescription" && doc.prescription) {
+    const today = istNow().date;
+    // A course counts from the prescription date; with no readable date, from the day the photo came in.
+    const rxDate = doc.prescription.date_iso;
+    const start = rxDate && ISO_DATE.test(rxDate) && rxDate <= today ? rxDate : today;
     const medicines: Medicine[] = doc.prescription.medicines.map((m) => {
-      const meals = toMeals(m);
+      const asNeeded = m.as_needed;
+      const meals = asNeeded ? [] : toMeals(m);
       const purpose = m.purpose_written ?? m.purpose_general;
+      const endsOn = asNeeded ? null : courseEnd(start, m.days);
       return {
         name: m.name,
         strength: m.strength,
@@ -201,7 +216,10 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
         food: (m.food === "unknown" ? "any" : m.food) as Food,
         purpose,
         purposeSource: m.purpose_written ? "prescription" : m.purpose_general ? "suggested" : "none",
-        needsCheck: m.unclear || meals.length === 0 || m.food === "unknown",
+        // A course already over on an old slip is marked, so the child decides before it is used.
+        needsCheck: m.unclear || (!asNeeded && meals.length === 0) || m.food === "unknown" || courseEnded(endsOn, today),
+        endsOn,
+        asNeeded,
       };
     });
     return { type: "prescription", medicines, doctor: doc.prescription.doctor, date: doc.prescription.date, followUp: toFollowUp(doc.follow_up), raw: doc };
@@ -273,7 +291,16 @@ export async function understand(
   meds: Medicine[],
   lang: ParentLang,
 ): Promise<Understood> {
-  const list = meds.map((m) => ({ name: m.name, strength: m.strength, quantity: m.quantity, meals: m.meals, food: m.food, for: m.purpose?.en ?? null }));
+  const list = meds.map((m) => ({
+    name: m.name,
+    strength: m.strength,
+    quantity: m.quantity,
+    meals: m.meals,
+    food: m.food,
+    for: m.purpose?.en ?? null,
+    only_when_needed: m.asNeeded ?? false,
+    last_day: m.endsOn ?? null,
+  }));
   const langName = { en: "English", hi: "Hindi", mr: "Marathi" }[lang];
   const context: Part = {
     text: `Medicine list (meals: b = breakfast, l = lunch, d = dinner):\n${JSON.stringify(list)}\n\nReply language: ${langName}\n\n${"text" in input ? `Message:\n${input.text}` : "The message is the voice note above."}`,

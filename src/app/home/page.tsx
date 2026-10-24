@@ -1,8 +1,9 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Bell, Camera, ChevronDown, ChevronRight, FileText, House, MessageCircle, Pill as PillIcon, Settings, Siren } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { dismissAlert } from "@/app/actions";
+import { dismissAlert, signOut } from "@/app/actions";
 import { Card, CardHead, FlagPill, MonthGrid, Pill, RangeBar, Ring, WeekBars } from "@/components/app/dashboard";
+import { BackLink } from "@/components/app/back-link";
 import { CopyButton } from "@/components/app/copy-button";
 import { IlloPanel, RxIllo } from "@/components/app/illustrations";
 import { ParentPhoneForm } from "@/components/app/parent-phone-form";
@@ -11,11 +12,11 @@ import { ThemeToggle } from "@/components/app/theme-toggle";
 import { VisitCard } from "@/components/app/visit-card";
 import { buttonVariants } from "@/components/ui/button";
 import { type DoseRow, lastDays, monthToDate, shiftDate, totals } from "@/lib/domain/adherence";
-import { formatTime, istNow } from "@/lib/domain/meals";
+import { formatTime, istNow, toMinutes } from "@/lib/domain/meals";
 import { groupByTest, outsideCount, type TestTrend } from "@/lib/domain/trends";
 import { type MealKey, MEALS, type Medicine, type ReportValue } from "@/lib/domain/types";
 import { type MedicineRow, type ReportValueRow, type VisitRow, mealTimes, toMedicine, toReportValue } from "@/lib/db/rows";
-import { CHILD_FOOD, CHILD_MEALS, makeT } from "@/lib/i18n/child";
+import { CHILD_FOOD, CHILD_MEALS, makeT, shortDate } from "@/lib/i18n/child";
 import { requireFamily } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -61,7 +62,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const view = sp.view === "date" ? "date" : "test";
   const lang = family.child_lang;
   const t = makeT(lang, { n: family.parent_call_name });
-  const { date: today } = istNow();
+  const { date: today, minutes: nowMinutes } = istNow();
 
   const [medsRes, pendingRes, dosesRes, reportsRes, msgsRes, alertsRes, visitsRes, rxRes, allMedsRes] = await Promise.all([
     supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true).order("created_at"),
@@ -91,17 +92,18 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const mealsWithMeds = MEALS.filter((k) => meds.some((m) => m.meals.includes(k)));
   const todayDoses = doses.filter((d) => d.dose_date === today);
   const statusOf = (k: MealKey) => todayDoses.find((d) => d.meal === k)?.status ?? "upcoming";
-  const nextMeal = mealsWithMeds.find((k) => statusOf(k) === "upcoming");
-  const missedToday = todayDoses.some((d) => d.status === "missed");
+  // The first meal whose time has not passed yet, by the clock. After the last meal, none until midnight.
+  const nextMeal = mealsWithMeds.find((k) => statusOf(k) === "upcoming" && toMinutes(times[k]) >= nowMinutes);
   const unseen = alerts.filter((a) => !a.seen_at);
   // "New list" has its own Check bar while a list is pending, so it is never a Home banner.
   const homeAlerts = unseen.filter((a) => a.kind !== "new_list");
-  const urgent = alerts.some((a) => a.severity === "urgent" && istNow(new Date(a.created_at)).date === today);
+  // Today's emergency or "dose not marked" alert keeps "Needs attention" until the child taps "Got it".
+  const needsAttention = unseen.some((a) => (a.severity === "urgent" || a.kind === "dose_missed") && istNow(new Date(a.created_at)).date === today);
   const flagLabels = { high: t("high"), low: t("low"), inRange: t("inRange"), noRange: t("noRange") };
 
   const status = !family.parent_linked_at ? (
     <Pill tone="mute">{t("notLinked")}</Pill>
-  ) : urgent || missedToday ? (
+  ) : needsAttention ? (
     <Pill tone="bad">{t("attention")}</Pill>
   ) : !meds.length ? (
     <Pill tone="warn">{t("waitingList")}</Pill>
@@ -125,6 +127,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
       </header>
 
       <main className="flex flex-1 flex-col gap-3 px-4 pt-4 pb-28">
+        {tab !== "home" && <BackLink href="/home" label={t("back")} />}
         {!family.parent_linked_at && (
           <Link href="/setup" className="rounded-xl bg-warn-soft px-3 py-2.5 text-sm text-warn">
             {t("waitHi")}
@@ -262,6 +265,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                           <p className="text-xs text-muted-foreground">
                             {m.quantity} · {CHILD_FOOD[lang][m.food]}
                             {m.purpose ? ` · ${m.purpose[lang]}` : ""}
+                            {m.endsOn ? ` · ${t("until", { d: shortDate(m.endsOn, lang) })}` : ""}
                           </p>
                         </div>
                       </div>
@@ -269,6 +273,30 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                 </Card>
               ))
             )}
+            {meds.some((m) => m.asNeeded) ? (
+              <Card>
+                <CardHead title={t("asNeeded")} />
+                <p className="text-xs text-muted-foreground">{t("asNeededNote")}</p>
+                {meds
+                  .filter((m) => m.asNeeded)
+                  .map((m) => (
+                    <div key={`sos-${m.id}`} className="flex items-center gap-3 py-1">
+                      <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-primary">
+                        <PillIcon className="size-4" aria-hidden />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-mono font-medium">
+                          {m.name} {m.strength}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {m.quantity}
+                          {m.purpose ? ` · ${m.purpose[lang]}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+              </Card>
+            ) : null}
             <div className="flex gap-2">
               {meds.length ? (
                 <Link href="/check" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12 flex-1 rounded-xl")}>
@@ -366,6 +394,15 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
               </span>
               <CopyButton text={`+${family.parent_phone}`} label={t("callParent")} done={t("copied")} />
             </Card>
+            {/* Kept last and in red, away from Save, so it is never tapped by mistake. */}
+            <form action={signOut} className="pt-4">
+              <button
+                type="submit"
+                className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12 w-full rounded-xl border-bad/40 text-base text-bad hover:bg-bad-soft hover:text-bad")}
+              >
+                {t("signOut")}
+              </button>
+            </form>
           </>
         )}
       </main>
@@ -572,7 +609,7 @@ function RxHistory({ prescriptions, medicines, t, lang }: { prescriptions: Presc
     <div key={m.id} className="flex items-center gap-2 border-b py-2 last:border-0">
       <div className="min-w-0 flex-1">
         <p className="font-mono text-sm font-medium">{`${m.name} ${m.strength}`.trim()}</p>
-        <p className="text-xs text-muted-foreground">{toMedicine(m).meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
+        <p className="text-xs text-muted-foreground">{m.as_needed ? t("asNeeded") : toMedicine(m).meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
       </div>
       {m.active ? (
         <Pill tone="ok">{t("ongoingPill")}</Pill>

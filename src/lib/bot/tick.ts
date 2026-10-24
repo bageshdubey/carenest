@@ -1,5 +1,5 @@
 import "server-only";
-import { activeMedicines, latestReportValues, linkedFamilies, markMissed, markVisitReminded, mealsSentToday, openDoses, recordReminder, visitsOn } from "@/lib/db/repo";
+import { activeMedicines, latestReportValues, linkedFamilies, markMissed, markVisitReminded, mealsSentToday, openDoses, recordReminder, stopEndedCourses, visitsOn } from "@/lib/db/repo";
 import type { FamilyRow } from "@/lib/db/rows";
 import { shiftDate } from "@/lib/domain/adherence";
 import { mealTimes } from "@/lib/db/rows";
@@ -9,6 +9,7 @@ import { alertChild, reminderToParent, toParent } from "./send";
 
 /**
  * Runs every few minutes (called by Supabase pg_cron):
+ * 0. stops medicines whose course ended yesterday or earlier, and tells the child,
  * 1. sends meal reminders that are due,
  * 2. marks reminders with no "Taken" after 60 minutes as not marked and alerts the child,
  * 3. sends doctor-visit reminders: the evening before (dinner time) and the morning of the visit (breakfast time).
@@ -19,6 +20,12 @@ export async function tick(now: Date = new Date()) {
   const byId = new Map(families.map((f) => [f.id, f]));
   let sent = 0;
   let missed = 0;
+
+  try {
+    await courseEndings(date, byId);
+  } catch (e) {
+    console.error("Could not stop ended courses", e);
+  }
 
   for (const family of families) {
     const meds = await activeMedicines(family.id);
@@ -70,6 +77,17 @@ export async function tick(now: Date = new Date()) {
   }
 
   return { sent, missed };
+}
+
+/** One alert per family, naming every medicine whose course just ended. */
+async function courseEndings(today: string, byId: Map<string, FamilyRow>) {
+  const ended = await stopEndedCourses(today);
+  const names = new Map<string, string[]>();
+  for (const m of ended) names.set(m.family_id, [...(names.get(m.family_id) ?? []), `${m.name} ${m.strength}`.trim()]);
+  for (const [familyId, list] of names) {
+    const family = byId.get(familyId);
+    if (family) await alertChild(family, "course_ended", { m: list.join(", ") });
+  }
 }
 
 /** True when "now" is inside the hour after this meal time, the same window meal reminders use. */

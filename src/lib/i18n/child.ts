@@ -61,7 +61,12 @@ const UI = {
     remove: "Remove",
     approve: "Approve list",
     saveList: "Save list",
-    mealNeedErr: "Each medicine needs at least one meal.",
+    mealNeedErr: "Each medicine needs at least one meal, or \"Only when needed\".",
+    asNeeded: "Only when needed",
+    asNeededNote: "Stays on the list. No reminder is sent for it.",
+    lastDay: "Last day (optional)",
+    lastDayNote: "Reminders stop after this day and you get an alert. Leave empty if there is no end.",
+    until: "Until {d}",
     checkFlagErr: "Fix the medicines marked 'Please check' first.",
     noPending: "No new list to check.",
     t_home: "Home",
@@ -259,7 +264,12 @@ const UI = {
     remove: "हटाएँ",
     approve: "सूची मंज़ूर करें",
     saveList: "सूची सहेजें",
-    mealNeedErr: "हर दवा के लिए कम से कम एक खाना चुनें।",
+    mealNeedErr: "हर दवा के लिए कम से कम एक खाना चुनें, या \"ज़रूरत होने पर\"।",
+    asNeeded: "ज़रूरत होने पर",
+    asNeededNote: "सूची में रहेगी। इसके लिए याद नहीं दिलाया जाएगा।",
+    lastDay: "आख़िरी दिन (वैकल्पिक)",
+    lastDayNote: "इस दिन के बाद याद दिलाना बंद होगा और आपको अलर्ट मिलेगा। अगर कोई अंत नहीं है तो खाली छोड़ें।",
+    until: "{d} तक",
     checkFlagErr: "पहले चिह्नित दवाएँ ठीक करें।",
     noPending: "जाँचने के लिए कोई नई सूची नहीं।",
     t_home: "होम",
@@ -422,3 +432,8 @@ export const CHILD_FOOD: Record<ChildLang, Record<Food, string>> = {
   en: { before: "Before food", after: "After food", any: "Any time" },
   hi: { before: "खाने से पहले", after: "खाने के बाद", any: "कभी भी" },
 };
+
+/** "2026-10-31" -> "31 Oct" in the child's language. */
+export function shortDate(isoDate: string, lang: ChildLang): string {
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString(lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+}

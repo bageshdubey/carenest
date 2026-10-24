@@ -55,6 +55,20 @@ export async function activeMedicines(familyId: string): Promise<Medicine[]> {
   return rows.map(toMedicine);
 }
 
+/**
+ * Stops every approved medicine whose last day was before today. It stays in the history as stopped.
+ * Returns the stopped medicines so the scheduler can tell each child.
+ */
+export async function stopEndedCourses(today: string): Promise<{ family_id: string; name: string; strength: string }[]> {
+  const ended = must(
+    await admin().from("medicines").select("id,family_id,name,strength").eq("active", true).not("ends_on", "is", null).lt("ends_on", today),
+  ) as { id: string; family_id: string; name: string; strength: string }[];
+  if (!ended.length) return [];
+  const ids = ended.map((m) => m.id);
+  must(await admin().from("medicines").update({ active: false, stopped_at: new Date().toISOString() }).in("id", ids));
+  return ended;
+}
+
 export async function hasPendingPrescription(familyId: string): Promise<boolean> {
   const res = await admin().from("prescriptions").select("id", { count: "exact", head: true }).eq("family_id", familyId).eq("status", "pending");
   if (res.error) throw new Error(res.error.message);

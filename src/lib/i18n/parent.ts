@@ -71,6 +71,8 @@ const MSG = {
     visitEve: "{n}, tomorrow ({d}) is your doctor visit{t}. Keep your prescriptions and reports ready.",
     visitMorning: "{n}, today is your doctor visit{t}. Take your prescriptions and reports with you.",
     timeAt: " at {t}",
+    sosTitle: "Only when needed (no reminder)",
+    until: "until {d}",
   },
   hi: {
     welcome:
@@ -130,6 +132,8 @@ const MSG = {
     visitEve: "{n}, कल ({d}) आपकी डॉक्टर विज़िट है{t}। अपने पर्चे और रिपोर्ट तैयार रखें।",
     visitMorning: "{n}, आज आपकी डॉक्टर विज़िट है{t}। अपने पर्चे और रिपोर्ट साथ ले जाएँ।",
     timeAt: ", समय {t}",
+    sosTitle: "ज़रूरत होने पर (याद नहीं दिलाया जाएगा)",
+    until: "{d} तक",
   },
   mr: {
     welcome:
@@ -189,6 +193,8 @@ const MSG = {
     visitEve: "{n}, उद्या ({d}) तुमची डॉक्टर भेट आहे{t}. तुमची प्रिस्क्रिप्शन आणि रिपोर्ट तयार ठेवा.",
     visitMorning: "{n}, आज तुमची डॉक्टर भेट आहे{t}. तुमची प्रिस्क्रिप्शन आणि रिपोर्ट सोबत घ्या.",
     timeAt: ", वेळ {t}",
+    sosTitle: "गरज असेल तेव्हा (आठवण केली जाणार नाही)",
+    until: "{d} पर्यंत",
   },
 } as const;
 
@@ -241,15 +247,29 @@ function medLine(lang: ParentLang, m: Medicine): string {
   return `• ${m.name} ${m.strength}, ${m.quantity}${purpose}`;
 }
 
-/** The full list, grouped by meal and split into before and after food. */
+/** "31 October" in the parent's language. */
+function dayMonth(lang: ParentLang, isoDate: string): string {
+  const locale = { en: "en-IN", hi: "hi-IN", mr: "mr-IN" }[lang];
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString(locale, { day: "numeric", month: "long", timeZone: "UTC" });
+}
+
+/**
+ * The full list, grouped by meal and split into before and after food. A course shows its last day.
+ * "Only when needed" medicines come last, in their own group.
+ */
 export function listText(lang: ParentLang, meds: Medicine[]): string {
+  const line = (m: Medicine) => {
+    const until = m.endsOn ? `, ${fill(MSG[lang].until, { d: dayMonth(lang, m.endsOn) })}` : "";
+    return `${medLine(lang, m)}, ${FOOD_NAMES[lang][m.food].toLowerCase()}${until}`;
+  };
   const blocks: string[] = [];
   for (const meal of MEALS as MK[]) {
     const ms = medicinesFor(meal, meds);
     if (!ms.length) continue;
-    const lines = ms.map((m) => `${medLine(lang, m)}, ${FOOD_NAMES[lang][m.food].toLowerCase()}`);
-    blocks.push(`${MEAL_NAMES[lang][meal]}:\n${lines.join("\n")}`);
+    blocks.push(`${MEAL_NAMES[lang][meal]}:\n${ms.map(line).join("\n")}`);
   }
+  const sos = meds.filter((m) => m.asNeeded);
+  if (sos.length) blocks.push(`${MSG[lang].sosTitle}:\n${sos.map(line).join("\n")}`);
   return blocks.join("\n\n");
 }
 
