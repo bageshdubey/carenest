@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { readDocument } from "@/lib/ai/gemini";
 import { toParent } from "@/lib/bot/send";
-import { markAlertSeen, markNewListSeen, savePrescription, uploadPhoto } from "@/lib/db/repo";
+import { markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { toMedicine } from "@/lib/db/rows";
 import { istNow, mealsInOrder } from "@/lib/domain/meals";
 import { makeLinkCode, normalisePhone } from "@/lib/domain/safety";
@@ -37,6 +37,7 @@ export async function createFamily(input: SetupInput): Promise<ActionResult> {
   if (!PHONE.test(parentPhone)) return { ok: false, error: "phone" };
   if (!["en", "hi"].includes(input.childLang) || !["en", "hi", "mr"].includes(input.parentLang)) return { ok: false, error: "lang" };
   if (!Object.values(input.meals).every((t) => TIME.test(t)) || !mealsInOrder(input.meals)) return { ok: false, error: "meals" };
+  if (await phoneInUse(parentPhone)) return { ok: false, error: "phoneTaken" };
 
   // The link code must be unique; try a few times on the rare clash.
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -53,6 +54,7 @@ export async function createFamily(input: SetupInput): Promise<ActionResult> {
       link_code: makeLinkCode(),
     });
     if (!error) return { ok: true };
+    if (error.message.includes("families_parent_phone_key")) return { ok: false, error: "phoneTaken" };
     if (error.code !== "23505" || error.message.includes("families_owner_idx")) return { ok: false, error: "save" };
   }
   return { ok: false, error: "save" };
@@ -186,6 +188,26 @@ export async function updateSettings(_prev: ActionResult | null, formData: FormD
   if (error) return { ok: false, error: "save" };
   revalidatePath("/home");
   return { ok: true };
+}
+
+/**
+ * The child changes the parent's number. The old number's WhatsApp link ends at once; the parent
+ * must send the new link from the new number. Medicines and history stay with the family.
+ */
+export async function changeParentPhone(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+  const { supabase, family } = await requireFamily();
+  const phone = normalisePhone(String(formData.get("parent_phone") ?? ""));
+  if (!PHONE.test(phone)) return { ok: false, error: "phone" };
+  if (phone === family.parent_phone) return { ok: true };
+  if (await phoneInUse(phone, family.id)) return { ok: false, error: "phoneTaken" };
+
+  const { error } = await supabase
+    .from("families")
+    .update({ parent_phone: phone, parent_linked_at: null, last_parent_message_at: null })
+    .eq("id", family.id);
+  if (error) return { ok: false, error: error.message.includes("families_parent_phone_key") ? "phoneTaken" : "save" };
+  revalidatePath("/home");
+  redirect("/setup");
 }
 
 /** "Got it" on an alert: hides it from Home and the bell. It stays in the Alerts tab. */

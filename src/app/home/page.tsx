@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { dismissAlert } from "@/app/actions";
 import { Card, CardHead, FlagPill, MonthGrid, Pill, RangeBar, Ring, WeekBars } from "@/components/app/dashboard";
 import { CopyButton } from "@/components/app/copy-button";
+import { ParentPhoneForm } from "@/components/app/parent-phone-form";
 import { SettingsForm } from "@/components/app/settings-form";
 import { VisitCard } from "@/components/app/visit-card";
 import { buttonVariants } from "@/components/ui/button";
@@ -303,6 +304,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
         {tab === "settings" && (
           <>
             <SettingsForm lang={lang} callName={family.parent_call_name} meals={times} childLang={family.child_lang} parentLang={family.parent_lang} />
+            <ParentPhoneForm lang={lang} callName={family.parent_call_name} parentPhone={family.parent_phone} />
             <Card className="flex-row items-center gap-3">
               <span className="flex-1 text-sm">
                 {t("parentNumber")}: <span className="font-mono">+{family.parent_phone}</span>

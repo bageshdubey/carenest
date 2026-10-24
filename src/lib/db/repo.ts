@@ -27,6 +27,15 @@ export async function familyByCode(code: string): Promise<FamilyRow | null> {
   return must(await admin().from("families").select("*").eq("link_code", code).maybeSingle()) as FamilyRow | null;
 }
 
+/** True if another family already uses this parent number. One number belongs to one child's account. */
+export async function phoneInUse(phone: string, exceptFamilyId: string | null = null): Promise<boolean> {
+  let query = admin().from("families").select("id", { count: "exact", head: true }).eq("parent_phone", phone);
+  if (exceptFamilyId) query = query.neq("id", exceptFamilyId);
+  const res = await query;
+  if (res.error) throw new Error(res.error.message);
+  return (res.count ?? 0) > 0;
+}
+
 export async function linkedFamilies(): Promise<FamilyRow[]> {
   return must(await admin().from("families").select("*").not("parent_linked_at", "is", null)) as FamilyRow[];
 }

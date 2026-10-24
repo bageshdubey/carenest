@@ -61,7 +61,10 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
       start(async () => {
         const res = await createFamily({ childName, callName, parentPhone, childLang, parentLang, meals });
         if (res.ok) setStep(5);
-        else setError(res.error === "meals" ? t("mealOrderErr") : res.error === "phone" ? t("numErr") : t("saveErr"));
+        else if (res.error === "phoneTaken") {
+          setStep(2);
+          setError(t("phoneTaken"));
+        } else setError(res.error === "meals" ? t("mealOrderErr") : res.error === "phone" ? t("numErr") : t("saveErr"));
       });
       return;
     }
