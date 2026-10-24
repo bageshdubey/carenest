@@ -12,7 +12,7 @@ import { ThemeToggle } from "@/components/app/theme-toggle";
 import { VisitCard } from "@/components/app/visit-card";
 import { buttonVariants } from "@/components/ui/button";
 import { type DoseRow, lastDays, monthToDate, shiftDate, totals } from "@/lib/domain/adherence";
-import { formatTime, istNow, toMinutes } from "@/lib/domain/meals";
+import { formatTime, istClock, istNow, toMinutes } from "@/lib/domain/meals";
 import { groupByTest, outsideCount, type TestTrend } from "@/lib/domain/trends";
 import { type MealKey, MEALS, type Medicine, type ReportValue } from "@/lib/domain/types";
 import { type MedicineRow, type ReportValueRow, type VisitRow, mealTimes, toMedicine, toReportValue } from "@/lib/db/rows";
@@ -67,7 +67,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const [medsRes, pendingRes, dosesRes, reportsRes, msgsRes, alertsRes, visitsRes, rxRes, allMedsRes] = await Promise.all([
     supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true).order("created_at"),
     supabase.from("prescriptions").select("id", { count: "exact", head: true }).eq("family_id", family.id).eq("status", "pending"),
-    supabase.from("doses").select("dose_date,meal,status").eq("family_id", family.id).gte("dose_date", shiftDate(today, -35)),
+    supabase.from("doses").select("dose_date,meal,status,later_until").eq("family_id", family.id).gte("dose_date", shiftDate(today, -35)),
     supabase.from("reports").select("id,lab,report_date,created_at,report_values(*)").eq("family_id", family.id).order("created_at", { ascending: false }).limit(50),
     supabase.from("messages").select("id,direction,body,created_at").eq("family_id", family.id).order("created_at", { ascending: false }).limit(60),
     supabase.from("alerts").select("*").eq("family_id", family.id).order("created_at", { ascending: false }).limit(30),
@@ -92,6 +92,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
   const mealsWithMeds = MEALS.filter((k) => meds.some((m) => m.meals.includes(k)));
   const todayDoses = doses.filter((d) => d.dose_date === today);
   const statusOf = (k: MealKey) => todayDoses.find((d) => d.meal === k)?.status ?? "upcoming";
+  // When the parent tapped "Later", the time the reminder comes again.
+  const laterOf = (k: MealKey) => todayDoses.find((d) => d.meal === k)?.later_until ?? null;
   // The first meal whose time has not passed yet, by the clock. After the last meal, none until midnight.
   const nextMeal = mealsWithMeds.find((k) => statusOf(k) === "upcoming" && toMinutes(times[k]) >= nowMinutes);
   const unseen = alerts.filter((a) => !a.seen_at);
@@ -182,6 +184,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                     <div className="flex min-w-0 flex-1 flex-col gap-2.5">
                       {mealsWithMeds.map((k) => {
                         const st = statusOf(k);
+                        const later = laterOf(k);
                         return (
                           <div key={k} className="flex items-center gap-2">
                             <span className={`size-2.5 shrink-0 rounded-full ${st === "taken" ? "bg-ok" : st === "missed" ? "bg-bad" : "bg-border"}`} />
@@ -190,6 +193,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                               <Pill tone="ok">{t("taken")}</Pill>
                             ) : st === "missed" ? (
                               <Pill tone="bad">{t("notMarked")}</Pill>
+                            ) : st === "sent" && later ? (
+                              <Pill tone="mute">{t("laterAt", { t: istClock(new Date(later)) })}</Pill>
                             ) : st === "sent" ? (
                               <Pill tone="mute">{t("sentWaiting")}</Pill>
                             ) : k === nextMeal ? (

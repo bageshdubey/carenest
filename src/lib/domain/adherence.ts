@@ -1,6 +1,7 @@
 import type { DoseStatus, MealKey } from "./types";
 
-export type DoseRow = { dose_date: string; meal: MealKey; status: DoseStatus };
+/** `later_until`: set while the parent put the reminder off with "Later". */
+export type DoseRow = { dose_date: string; meal: MealKey; status: DoseStatus; later_until?: string | null };
 export type DayState = "ok" | "warn" | "bad" | "none" | "open";
 export type DayStat = { date: string; taken: number; missed: number; open: number; state: DayState };
 

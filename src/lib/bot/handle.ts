@@ -12,6 +12,7 @@ import {
   markTaken,
   nextVisit,
   previousValues,
+  putOffDose,
   savePrescription,
   saveReport,
   setMessageBody,
@@ -21,7 +22,7 @@ import {
 import type { FamilyRow } from "@/lib/db/rows";
 import { isOutOfRange } from "@/lib/domain/report";
 import { findLinkCode, isEmergency } from "@/lib/domain/safety";
-import { istNow } from "@/lib/domain/meals";
+import { istClock, istNow } from "@/lib/domain/meals";
 import type { MealKey } from "@/lib/domain/types";
 import { doctorQuestions, listText, mealName, pm, reminderLines, reportText, visitText } from "@/lib/i18n/parent";
 import { downloadMedia, sendText } from "@/lib/whatsapp/client";
@@ -227,6 +228,16 @@ async function handleButton(family: FamilyRow, buttonId: string) {
     const [, date, meal] = buttonId.split(":");
     await markTaken(family.id, date, meal as MealKey);
     await toParent(family, pm(lang, "thanks", v(family)));
+    return;
+  }
+  if (buttonId.startsWith("later:")) {
+    const [, date, meal] = buttonId.split(":");
+    const res = await putOffDose(family.id, date, meal as MealKey, new Date());
+    if (res.result === "later") {
+      await toParent(family, pm(lang, "laterOk", { ...v(family), t: istClock(res.until) }));
+    } else {
+      await toParent(family, pm(lang, res.result === "limit" ? "laterLimit" : "laterClosed", v(family)));
+    }
     return;
   }
   if (buttonId === "list") {
