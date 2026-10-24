@@ -23,6 +23,10 @@ export default async function CheckPage() {
     ? supabase.from("medicines").select("*").eq("prescription_id", pending.id)
     : supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true);
   const { data: rows } = await query.order("created_at");
+  // A new prescription is added to the current list, so its medicines are compared with that list.
+  const { data: currentRows } = pending
+    ? await supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true).order("created_at")
+    : { data: [] };
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-8">
@@ -32,6 +36,7 @@ export default async function CheckPage() {
         mode={pending ? "pending" : "active"}
         prescriptionId={pending?.id ?? null}
         medicines={((rows ?? []) as MedicineRow[]).map(toMedicine)}
+        current={((currentRows ?? []) as MedicineRow[]).map(toMedicine)}
         after={after}
       />
     </main>

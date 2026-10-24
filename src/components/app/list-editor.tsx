@@ -6,6 +6,7 @@ import { type EditedMedicine, saveList } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { type DuplicateFlag, findDuplicates } from "@/lib/domain/duplicates";
 import type { ChildLang, Food, MealKey, Medicine } from "@/lib/domain/types";
 import { CHILD_FOOD, CHILD_MEALS, makeT } from "@/lib/i18n/child";
 
@@ -17,6 +18,7 @@ export function ListEditor({
   mode,
   prescriptionId,
   medicines,
+  current,
   after,
 }: {
   lang: ChildLang;
@@ -24,6 +26,8 @@ export function ListEditor({
   mode: "pending" | "active";
   prescriptionId: string | null;
   medicines: Medicine[];
+  /** The approved list a new prescription will join; empty when editing that list itself. */
+  current: Medicine[];
   after: string;
 }) {
   const t = makeT(lang, { n: callName });
@@ -45,6 +49,8 @@ export function ListEditor({
   );
   const [error, setError] = useState("");
   const [saving, start] = useTransition();
+  const duplicates = findDuplicates(rows, current);
+  const dupNote = (i: number) => <DuplicateNote flag={duplicates[i]} lang={lang} t={t} />;
 
   const update = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const toggleMeal = (i: number, k: MealKey) => {
@@ -74,6 +80,7 @@ export function ListEditor({
           <div key={i} className="flex flex-col gap-3 rounded-2xl bg-card p-4">
             {r.needsCheck && <span className="self-start rounded-full bg-warn-soft px-2.5 py-0.5 text-xs font-bold text-warn">{t("pleaseCheck")}</span>}
             <Field id={`name_${i}`} label={t("medName")} value={r.name} onChange={(v) => update(i, { name: v })} />
+            {dupNote(i)}
             <div className="grid grid-cols-2 gap-2">
               <Field id={`strength_${i}`} label={t("medStrength")} value={r.strength} onChange={(v) => update(i, { strength: v })} />
               <Field id={`qty_${i}`} label={t("medQty")} value={r.quantity} onChange={(v) => update(i, { quantity: v })} />
@@ -118,6 +125,7 @@ export function ListEditor({
                 {r.purposeText && !r.purposeChanged && r.source === "suggested" ? ` (${t("suggested")})` : ""}
                 {r.purposeText && !r.purposeChanged && r.source === "prescription" ? ` (${t("fromRx")})` : ""}
               </p>
+              {dupNote(i)}
             </div>
             <Button variant="outline" size="sm" className="rounded-lg" onClick={() => update(i, { editing: true })}>
               {t("edit")}
@@ -136,6 +144,23 @@ export function ListEditor({
           {mode === "pending" ? t("approve") : t("saveList")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** "Already on Amma's list" or "Appears twice": shown to the child, never blocks approving. */
+function DuplicateNote({ flag, lang, t }: { flag: DuplicateFlag<Medicine>; lang: ChildLang; t: ReturnType<typeof makeT> }) {
+  if (!flag.onList && !flag.twiceInList) return null;
+  const m = flag.onList;
+  return (
+    <div role="note" className="mt-2 rounded-xl bg-warn-soft px-3 py-2 text-sm">
+      {m ? (
+        <p className="font-bold text-warn">
+          {t("dupOnList")}: {`${m.name} ${m.strength}`.trim()}, {m.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}
+        </p>
+      ) : null}
+      {flag.twiceInList ? <p className="font-bold text-warn">{t("dupInList")}</p> : null}
+      <p className="text-muted-foreground">{t("dupNote")}</p>
     </div>
   );
 }
