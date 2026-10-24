@@ -103,8 +103,11 @@ export type EditedMedicine = {
 /**
  * Approves a pending prescription (mode "pending") or saves edits to the
  * current list (mode "active"). Reminders only ever use approved medicines.
+ * A medicine taken off the ongoing list is kept as stopped, for the history; one
+ * removed from a prescription before it was approved was never taken, so it goes.
+ * `stopIds`: ongoing medicines the child said were stopped when approving a new prescription.
  */
-export async function saveList(mode: "pending" | "active", prescriptionId: string | null, meds: EditedMedicine[]): Promise<ActionResult> {
+export async function saveList(mode: "pending" | "active", prescriptionId: string | null, meds: EditedMedicine[], stopIds: string[] = []): Promise<ActionResult> {
   const { supabase, family } = await requireFamily();
   const clean = meds.filter((m) => m.name.trim());
   if (clean.some((m) => m.meals.length === 0)) return { ok: false, error: "meals" };
@@ -118,8 +121,14 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
 
   const keep = new Set(clean.map((m) => m.id).filter(Boolean) as string[]);
   const remove = (existing ?? []).map((r: { id: string }) => r.id).filter((id: string) => !keep.has(id));
+  const stopped = { active: false, stopped_at: new Date().toISOString() };
   if (remove.length) {
-    const { error } = await supabase.from("medicines").delete().in("id", remove);
+    const { error } =
+      mode === "active" ? await supabase.from("medicines").update(stopped).in("id", remove) : await supabase.from("medicines").delete().in("id", remove);
+    if (error) return { ok: false, error: "save" };
+  }
+  if (mode === "pending" && stopIds.length) {
+    const { error } = await supabase.from("medicines").update(stopped).eq("family_id", family.id).eq("active", true).in("id", stopIds);
     if (error) return { ok: false, error: "save" };
   }
 

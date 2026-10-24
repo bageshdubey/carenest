@@ -6,7 +6,7 @@ import { type EditedMedicine, saveList } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type DuplicateFlag, findDuplicates } from "@/lib/domain/duplicates";
+import { type DuplicateFlag, findDuplicates, medicineKey } from "@/lib/domain/duplicates";
 import type { ChildLang, Food, MealKey, Medicine } from "@/lib/domain/types";
 import { CHILD_FOOD, CHILD_MEALS, makeT } from "@/lib/i18n/child";
 
@@ -51,6 +51,10 @@ export function ListEditor({
   const [saving, start] = useTransition();
   const duplicates = findDuplicates(rows, current);
   const dupNote = (i: number) => <DuplicateNote flag={duplicates[i]} lang={lang} t={t} />;
+  // Ongoing medicines the new prescription does not name: the child says if each is still taken.
+  const newKeys = new Set(rows.filter((r) => r.name.trim()).map((r) => medicineKey(r.name)));
+  const others = mode === "pending" ? current.filter((m) => m.id && !newKeys.has(medicineKey(m.name))) : [];
+  const [keep, setKeep] = useState<Record<string, boolean>>({});
 
   const update = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const toggleMeal = (i: number, k: MealKey) => {
@@ -63,8 +67,10 @@ export function ListEditor({
     const live = rows.filter((r) => r.name.trim());
     if (live.some((r) => r.meals.length === 0)) return setError(t("mealNeedErr"));
     if (live.some((r) => r.needsCheck && r.editing)) return setError(t("checkFlagErr"));
+    if (others.some((m) => keep[m.id!] === undefined)) return setError(t("ongoingChooseErr"));
+    const stopIds = others.filter((m) => keep[m.id!] === false).map((m) => m.id!);
     start(async () => {
-      const res = await saveList(mode, prescriptionId, live);
+      const res = await saveList(mode, prescriptionId, live, stopIds);
       if (res.ok) router.push(after);
       else setError(res.error === "meals" ? t("mealNeedErr") : t("saveErr"));
     });
@@ -133,6 +139,31 @@ export function ListEditor({
           </div>
         ),
       )}
+
+      {others.length ? (
+        <div className="flex flex-col gap-3 rounded-2xl bg-card p-4">
+          <div>
+            <p className="font-bold">{t("ongoingAskTitle")}</p>
+            <p className="text-sm text-muted-foreground">{t("ongoingAskSub")}</p>
+          </div>
+          {others.map((m) => (
+            <div key={m.id} className="flex flex-col gap-2 border-t pt-3">
+              <div>
+                <p className="font-mono font-medium">{`${m.name} ${m.strength}`.trim()}</p>
+                <p className="text-xs text-muted-foreground">{m.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
+              </div>
+              <div className="flex gap-2">
+                <Toggle on={keep[m.id!] === true} onClick={() => setKeep({ ...keep, [m.id!]: true })}>
+                  {t("stillTaking")}
+                </Toggle>
+                <Toggle on={keep[m.id!] === false} onClick={() => setKeep({ ...keep, [m.id!]: false })}>
+                  {t("stopIt")}
+                </Toggle>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <p role="alert" className="text-sm text-bad">
