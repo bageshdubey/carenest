@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { readDocument } from "@/lib/ai/gemini";
 import { toParent } from "@/lib/bot/send";
+import { admin } from "@/lib/db/admin";
 import { markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { toMedicine } from "@/lib/db/rows";
 import { istNow, mealsInOrder } from "@/lib/domain/meals";
@@ -28,7 +29,7 @@ export type SetupInput = {
 
 /** Creates the family after the setup wizard. */
 export async function createFamily(input: SetupInput): Promise<ActionResult> {
-  const { supabase, user, family } = await currentSession();
+  const { user, family } = await currentSession();
   if (!user) return { ok: false, error: "signin" };
   if (family) return { ok: true };
 
@@ -41,7 +42,7 @@ export async function createFamily(input: SetupInput): Promise<ActionResult> {
 
   // The link code must be unique; try a few times on the rare clash.
   for (let attempt = 0; attempt < 5; attempt++) {
-    const { error } = await supabase.from("families").insert({
+    const { error } = await admin().from("families").insert({
       owner_id: user.id,
       child_name: input.childName.trim(),
       child_lang: input.childLang,
@@ -210,13 +211,13 @@ export async function updateSettings(_prev: ActionResult | null, formData: FormD
  * must send the new link from the new number. Medicines and history stay with the family.
  */
 export async function changeParentPhone(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
-  const { supabase, family } = await requireFamily();
+  const { family } = await requireFamily();
   const phone = normalisePhone(String(formData.get("parent_phone") ?? ""));
   if (!PHONE.test(phone)) return { ok: false, error: "phone" };
   if (phone === family.parent_phone) return { ok: true };
   if (await phoneInUse(phone, family.id)) return { ok: false, error: "phoneTaken" };
 
-  const { error } = await supabase
+  const { error } = await admin()
     .from("families")
     .update({ parent_phone: phone, parent_linked_at: null, last_parent_message_at: null })
     .eq("id", family.id);
