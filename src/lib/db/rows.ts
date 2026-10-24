@@ -44,6 +44,8 @@ export type MedicineRow = {
   needs_check: boolean;
   active: boolean;
   created_at: string;
+  /** Set when the child stops the medicine. Missing until migration 0006 has run. */
+  stopped_at?: string | null;
 };
 
 export type ReportValueRow = {
