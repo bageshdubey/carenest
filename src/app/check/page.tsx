@@ -1,5 +1,7 @@
 import { ListEditor } from "@/components/app/list-editor";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import { type MedicineRow, toMedicine } from "@/lib/db/rows";
+import { makeT } from "@/lib/i18n/child";
 import { requireFamily } from "@/lib/supabase/server";
 
 // Every page reads the login session, so it renders on the server per request.
@@ -30,6 +32,9 @@ export default async function CheckPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 py-8">
+      <div className="mb-2 flex justify-end">
+        <ThemeToggle label={makeT(family.child_lang)("themeToggle")} />
+      </div>
       <ListEditor
         lang={family.child_lang}
         callName={family.parent_call_name}

@@ -228,6 +228,12 @@ export async function dismissAlert(formData: FormData) {
   revalidatePath("/home");
 }
 
+/** True once the parent has tapped the link and sent the message. The send screen asks every few seconds. */
+export async function parentLinked(): Promise<boolean> {
+  const { family } = await currentSession();
+  return !!family?.parent_linked_at;
+}
+
 export async function signOut() {
   const supabase = await supabaseServer();
   await supabase.auth.signOut();

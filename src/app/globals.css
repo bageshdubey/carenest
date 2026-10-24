@@ -73,35 +73,35 @@
   --radius: 0.875rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f1519;
-    --foreground: #e6eef1;
-    --card: #172127;
-    --card-foreground: #e6eef1;
-    --popover: #172127;
-    --popover-foreground: #e6eef1;
-    --primary: #4cc3a8;
-    --primary-foreground: #06231d;
-    --secondary: #1f2c33;
-    --secondary-foreground: #e6eef1;
-    --muted: #1f2c33;
-    --muted-foreground: #9aabb3;
-    --accent: #163a33;
-    --accent-foreground: #4cc3a8;
-    --brand-soft: #163a33;
-    --destructive: #f2948b;
-    --border: #2b3a42;
-    --input: #2b3a42;
-    --ring: #4cc3a8;
-    --ok: #86d494;
-    --ok-soft: #18331d;
-    --warn: #f0bf5c;
-    --warn-soft: #3a2d10;
-    --bad: #f2948b;
-    --bad-soft: #3d1a17;
-    color-scheme: dark;
-  }
+/* Dark theme: on when <html> has the "dark" class. The script in layout.tsx sets it before the page
+   shows, from the switch in the corner, or from the device setting until the switch is used. */
+.dark {
+  --background: #0f1519;
+  --foreground: #e6eef1;
+  --card: #172127;
+  --card-foreground: #e6eef1;
+  --popover: #172127;
+  --popover-foreground: #e6eef1;
+  --primary: #4cc3a8;
+  --primary-foreground: #06231d;
+  --secondary: #1f2c33;
+  --secondary-foreground: #e6eef1;
+  --muted: #1f2c33;
+  --muted-foreground: #9aabb3;
+  --accent: #163a33;
+  --accent-foreground: #4cc3a8;
+  --brand-soft: #163a33;
+  --destructive: #f2948b;
+  --border: #2b3a42;
+  --input: #2b3a42;
+  --ring: #4cc3a8;
+  --ok: #86d494;
+  --ok-soft: #18331d;
+  --warn: #f0bf5c;
+  --warn-soft: #3a2d10;
+  --bad: #f2948b;
+  --bad-soft: #3d1a17;
+  color-scheme: dark;
 }
 
 @layer base {
@@ -120,4 +120,11 @@
     @apply font-heading;
     text-wrap: balance;
   }
+}
+
+/* The tick on the "connected" screen pops in once. */
+@keyframes pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  70% { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
 }

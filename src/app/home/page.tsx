@@ -1,11 +1,13 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Bell, ChevronDown, ChevronRight, FileText, House, MessageCircle, Pill as PillIcon, Settings, Siren } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Bell, Camera, ChevronDown, ChevronRight, FileText, House, MessageCircle, Pill as PillIcon, Settings, Siren } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { dismissAlert } from "@/app/actions";
 import { Card, CardHead, FlagPill, MonthGrid, Pill, RangeBar, Ring, WeekBars } from "@/components/app/dashboard";
 import { CopyButton } from "@/components/app/copy-button";
+import { IlloPanel, RxIllo } from "@/components/app/illustrations";
 import { ParentPhoneForm } from "@/components/app/parent-phone-form";
 import { SettingsForm } from "@/components/app/settings-form";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import { VisitCard } from "@/components/app/visit-card";
 import { buttonVariants } from "@/components/ui/button";
 import { type DoseRow, lastDays, monthToDate, shiftDate, totals } from "@/lib/domain/adherence";
@@ -101,6 +103,8 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
     <Pill tone="mute">{t("notLinked")}</Pill>
   ) : urgent || missedToday ? (
     <Pill tone="bad">{t("attention")}</Pill>
+  ) : !meds.length ? (
+    <Pill tone="warn">{t("waitingList")}</Pill>
   ) : (
     <Pill tone="ok">{t("onTrack")}</Pill>
   );
@@ -113,6 +117,7 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
           <span className="font-heading text-lg font-bold">{family.parent_call_name}</span>
           {status}
         </div>
+        <ThemeToggle label={t("themeToggle")} />
         <Link href="/home?tab=alerts" aria-label={t("t_alerts")} className="relative grid size-10 place-items-center rounded-xl border">
           <Bell className="size-5" aria-hidden />
           {unseen.length ? <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[11px] font-bold text-card">{unseen.length}</span> : null}
@@ -145,9 +150,26 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
             ))}
 
             {!meds.length ? (
-              <Card>
-                <p className="text-muted-foreground">{t("todayEmpty")}</p>
-              </Card>
+              <>
+                {/* Day one: nothing to remind yet. One clear next step, unless a list is already waiting for the child's check. */}
+                {!pending && (
+                  <Card className="items-center gap-3 text-center">
+                    <IlloPanel className="h-32 w-full rounded-2xl">
+                      <RxIllo />
+                    </IlloPanel>
+                    <h2 className="text-xl font-bold">{t("emptyTitle")}</h2>
+                    <p className="text-[15px] leading-relaxed text-muted-foreground">{t("emptyBody")}</p>
+                    <Link href="/add" className={cn(buttonVariants({ size: "lg" }), "h-12 w-full gap-2 rounded-2xl text-base font-bold")}>
+                      <Camera className="size-5" aria-hidden />
+                      {t("addPhoto")}
+                    </Link>
+                  </Card>
+                )}
+                <Card>
+                  <CardHead title={t("today")} />
+                  <p className="text-sm text-muted-foreground">{t("todayEmpty")}</p>
+                </Card>
+              </>
             ) : (
               <>
                 <Card>

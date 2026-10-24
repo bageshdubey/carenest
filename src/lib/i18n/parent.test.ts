@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RangeFlag, ReportValue } from "@/lib/domain/types";
-import { REPORT_MAX, reportText } from "./parent";
+import { REPORT_MAX, pm, reportText } from "./parent";
 
 const value = (test: string, flag: RangeFlag): ReportValue => ({
   test,
@@ -59,5 +59,23 @@ describe("report summary", () => {
     const text = reportText("en", vars, [old], {});
     expect(text).toContain("  What it is: Salt level in blood");
     expect(text).not.toContain("Why it's done");
+  });
+});
+
+describe("CareNest's voice", () => {
+  // The Hindi and Marathi voices are women's, so CareNest never says "I" in the masculine.
+  const KEYS = ["welcome", "checked", "fixed", "repIntro", "repOutro", "busy"] as const;
+  const vars = { n: "Amma", c: "Rahul" };
+
+  it("speaks as a woman in Hindi", () => {
+    const text = KEYS.map((k) => pm("hi", k, vars)).join(" ");
+    expect(text).not.toMatch(/दूँगा|ऊँगा|माँगता|भेजता|सकता हूँ|करता हूँ|सकता।|थोड़ा व्यस्त/);
+    expect(text).toMatch(/दिलाऊँगी/);
+  });
+
+  it("speaks as a woman in Marathi", () => {
+    const text = KEYS.map((k) => pm("mr", k, vars)).join(" ");
+    expect(text).not.toMatch(/शकतो|करतो|थोडा व्यस्त/);
+    expect(text).toMatch(/शकते/);
   });
 });

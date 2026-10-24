@@ -1,5 +1,6 @@
 "use client";
 
+import { Camera, LoaderCircle } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { uploadChildPrescription } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,8 @@ export function PhotoUpload({ label, readingText, errorText, onDone }: { label: 
           });
         }}
       />
-      <Button size="lg" className="h-12 rounded-xl text-base font-bold" disabled={pending} onClick={() => input.current?.click()}>
+      <Button size="lg" className="h-14 gap-2.5 rounded-2xl text-lg font-bold whitespace-normal" disabled={pending} onClick={() => input.current?.click()}>
+        {pending ? <LoaderCircle className="size-5 shrink-0 animate-spin" aria-hidden /> : <Camera className="size-5 shrink-0" aria-hidden />}
         {pending ? readingText : label}
       </Button>
       {error ? (
