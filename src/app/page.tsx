@@ -2,7 +2,8 @@ import { Lock, MessageCircle, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { GoogleButton } from "@/components/app/google-button";
-import { HeroIllo, IlloPanel, LogoMark } from "@/components/app/illustrations";
+import { HeroVideo } from "@/components/app/hero-video";
+import { LogoMark } from "@/components/app/illustrations";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { makeT } from "@/lib/i18n/child";
 import { currentSession } from "@/lib/supabase/server";
@@ -48,9 +49,7 @@ export default async function Landing({ searchParams }: PageProps<"/">) {
       </header>
 
       <div className="grid flex-1 gap-6 md:grid-cols-2 md:items-center md:gap-12">
-        <IlloPanel className="h-48 md:order-last md:h-96">
-          <HeroIllo />
-        </IlloPanel>
+        <HeroVideo label={t("videoLabel")} pauseLabel={t("pauseVideo")} playLabel={t("playVideo")} className="md:order-last" />
 
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2.5">
