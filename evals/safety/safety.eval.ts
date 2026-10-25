@@ -4,7 +4,7 @@ import { handleIncoming } from "@/lib/bot/handle";
 import { speak } from "@/lib/ai/sarvam";
 import { isEmergency } from "@/lib/domain/safety";
 import { pm } from "@/lib/i18n/parent";
-import { type Capture, PHONES, capture, family, pool } from "../shared/fixture";
+import { type Capture, PHONES, capture, pool } from "../shared/fixture";
 import { CASES, type Case, VOICE_IDS, type Want } from "./cases";
 
 /**
