@@ -24,7 +24,7 @@ dashboard.sarvam.ai > API keys > create one > `SARVAM_API_KEY` in `.env.local` a
 2. App settings > Basic > App secret > `WHATSAPP_APP_SECRET`.
 3. Make up a long random `WHATSAPP_VERIFY_TOKEN`.
 4. After the app is live: WhatsApp > Configuration > Webhook: URL `https://carenestapp.vercel.app/api/whatsapp`, verify token = the one above, subscribe to `messages`.
-5. Add the parent's number to the test number's recipient list (5 numbers max). The child gets alerts on the dashboard only, so their number is not needed.
+5. Put the WhatsApp number (digits only, with country code) in `NEXT_PUBLIC_WHATSAPP_NUMBER` and its Phone Number ID (WhatsApp > API Setup) in `WHATSAPP_PHONE_NUMBER_ID`, in `.env.local` and in Vercel. On a production number any parent can write in; no recipient list. The child gets alerts on the dashboard only.
 
 ## 5. Run locally
 ```bash
