@@ -102,7 +102,12 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
         <p className="text-[17px] leading-relaxed text-muted-foreground">{t("photosSub")}</p>
         <PrivacyNote text={t("privacyNote")} linkLabel={t("privacy")} />
         <div className="mt-auto flex flex-col gap-2.5">
-          <PhotoUpload label={t("addPhoto")} readingText={t("reading")} errorText={t("readErr")} onDone={() => router.push("/check")} />
+          <PhotoUpload
+            label={t("addPhoto")}
+            readingText={t("reading")}
+            errors={{ read: t("readErr"), busy: t("busyErr"), size: t("sizeErr") }}
+            onDone={() => router.push("/check")}
+          />
           <Button variant="outline" size="lg" className="h-13 rounded-2xl text-[17px]" onClick={() => router.refresh()}>
             {t("skip")}
           </Button>
