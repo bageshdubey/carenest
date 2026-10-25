@@ -74,6 +74,15 @@ export default function PrivacyPage() {
         </section>
 
         <section className="flex flex-col gap-3">
+          <h2>How it is protected</h2>
+          <ul>
+            <li>Everything travels over a secure (HTTPS) connection.</li>
+            <li>The database and photos are stored encrypted, in Mumbai, India. Photos are in private storage, not on any public link.</li>
+            <li>Access keys stay on our server, never in the app or in messages.</li>
+          </ul>
+        </section>
+
+        <section className="flex flex-col gap-3">
           <h2>Services that process it for us</h2>
           <ul>
             <li>Supabase: database, sign-in and photo storage, in Mumbai, India.</li>

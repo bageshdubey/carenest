@@ -1,5 +1,6 @@
 import { AddPrescription } from "@/components/app/add-prescription";
 import { BackLink } from "@/components/app/back-link";
+import { PrivacyNote } from "@/components/app/privacy-note";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { makeT } from "@/lib/i18n/child";
 import { requireFamily } from "@/lib/supabase/server";
@@ -19,6 +20,7 @@ export default async function AddPage() {
       </div>
       <h1 className="text-2xl leading-tight font-bold">{t("addRx")}</h1>
       <p className="text-muted-foreground">{t("photosSub")}</p>
+      <PrivacyNote text={t("privacyNote")} linkLabel={t("privacy")} />
       <AddPrescription label={t("addPhoto")} readingText={t("reading")} errorText={t("readErr")} />
     </main>
   );
