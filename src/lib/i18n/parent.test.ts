@@ -64,7 +64,7 @@ describe("report summary", () => {
 
 describe("CareNest's voice", () => {
   // The Hindi and Marathi voices are women's, so CareNest never says "I" in the masculine.
-  const KEYS = ["welcome", "checked", "fixed", "repIntro", "repOutro", "busy"] as const;
+  const KEYS = ["welcome", "readingIt", "checked", "fixed", "repIntro", "repOutro", "busy"] as const;
   const vars = { n: "Amma", c: "Rahul" };
 
   it("speaks as a woman in Hindi", () => {

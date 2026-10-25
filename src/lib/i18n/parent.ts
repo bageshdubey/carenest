@@ -16,6 +16,7 @@ const MSG = {
     welcome:
       "Namaste {n}. I'm CareNest. {c} set me up for you.\nSend me a photo of your prescription, and I'll send back your tablets by breakfast, lunch and dinner.\nI never ask for money, OTP or passwords, and never send links.",
     already: "{c} already added your prescription.",
+    readingIt: "Thank you, {n}. I'm reading it now. This can take up to a minute.",
     gotRx: "Thank you, {n}. I've read it. {c} is checking the list. Until then, follow your paper prescription.",
     checked: "{c} checked your list, {n}. From now on I'll remind you at each meal.",
     footer: "Always follow your prescription and your doctor.",
@@ -83,6 +84,7 @@ const MSG = {
     welcome:
       "नमस्ते {n}। मैं CareNest हूँ। {c} ने मुझे आपके लिए शुरू किया है।\nअपने पर्चे की फ़ोटो भेजिए, मैं आपकी गोलियाँ नाश्ते, दोपहर और रात के खाने के हिसाब से भेज दूँगी।\nमैं कभी पैसे, OTP या पासवर्ड नहीं माँगती, और कोई लिंक नहीं भेजती।",
     already: "{c} ने आपका पर्चा पहले ही जोड़ दिया है।",
+    readingIt: "धन्यवाद {n}। मैं इसे अभी पढ़ रही हूँ। इसमें एक मिनट तक लग सकता है।",
     gotRx: "धन्यवाद {n}। मैंने पढ़ लिया है। {c} सूची जाँच रहे हैं। तब तक अपने कागज़ वाले पर्चे के हिसाब से ही दवा लें।",
     checked: "{c} ने आपकी सूची जाँच ली है, {n}। अब से मैं हर खाने के समय याद दिलाऊँगी।",
     footer: "हमेशा अपने पर्चे और डॉक्टर की बात मानें।",
@@ -149,6 +151,7 @@ const MSG = {
     welcome:
       "नमस्कार {n}. मी CareNest आहे. {c} यांनी मला तुमच्यासाठी सुरू केले आहे.\nतुमच्या प्रिस्क्रिप्शनचा फोटो पाठवा, मी तुमच्या गोळ्या नाश्ता, दुपारचे जेवण आणि रात्रीचे जेवण यानुसार पाठवेन.\nमी कधीही पैसे, OTP किंवा पासवर्ड मागत नाही, आणि लिंक पाठवत नाही.",
     already: "{c} यांनी तुमचे प्रिस्क्रिप्शन आधीच जोडले आहे.",
+    readingIt: "धन्यवाद {n}. मी हे आत्ता वाचत आहे. याला एक मिनिटापर्यंत वेळ लागू शकते.",
     gotRx: "धन्यवाद {n}. मी वाचले आहे. {c} यादी तपासत आहेत. तोपर्यंत तुमच्या कागदी प्रिस्क्रिप्शनप्रमाणेच औषध घ्या.",
     checked: "{c} यांनी तुमची यादी तपासली आहे, {n}. आता प्रत्येक जेवणाच्या वेळी मी आठवण करून देईन.",
     footer: "नेहमी तुमचे प्रिस्क्रिप्शन आणि डॉक्टरांचे ऐका.",
