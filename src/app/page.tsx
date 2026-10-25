@@ -1,5 +1,6 @@
 import { Lock, MessageCircle, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { GoogleButton } from "@/components/app/google-button";
 import { HeroVideo } from "@/components/app/hero-video";
@@ -12,6 +13,8 @@ import { currentSession } from "@/lib/supabase/server";
 export const instant = false;
 
 export default async function Landing({ searchParams }: PageProps<"/">) {
+  // Render only for the real request: the login check reads the current time.
+  await connection();
   const { user } = await currentSession();
   if (user) redirect("/home");
   const { error, lang: langParam } = await searchParams;

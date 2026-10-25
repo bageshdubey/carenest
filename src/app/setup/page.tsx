@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { signOut } from "@/app/actions";
 import { SendLink } from "@/components/app/send-link";
 import { SetupWizard } from "@/components/app/setup-wizard";
@@ -12,6 +13,8 @@ import { cn } from "@/lib/utils";
 export const instant = false;
 
 export default async function SetupPage() {
+  // Render only for the real request: the login check reads the current time.
+  await connection();
   const { supabase, user, family } = await currentSession();
   if (!user) redirect("/");
   if (family?.parent_linked_at) redirect("/home");

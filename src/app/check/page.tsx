@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { BackLink } from "@/components/app/back-link";
 import { ListEditor } from "@/components/app/list-editor";
 import { ThemeToggle } from "@/components/app/theme-toggle";
@@ -10,6 +11,8 @@ export const instant = false;
 
 /** Checks a new prescription's list, or edits the current list when nothing is pending. */
 export default async function CheckPage() {
+  // Render only for the real request: the login check reads the current time.
+  await connection();
   const { supabase, family } = await requireFamily();
   const after = family.parent_linked_at ? "/home" : "/setup";
   const t = makeT(family.child_lang);

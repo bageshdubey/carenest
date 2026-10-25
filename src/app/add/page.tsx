@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { AddPrescription } from "@/components/app/add-prescription";
 import { BackLink } from "@/components/app/back-link";
 import { PrivacyNote } from "@/components/app/privacy-note";
@@ -10,6 +11,8 @@ export const instant = false;
 
 /** The child adds another prescription photo from the Medicines tab. */
 export default async function AddPage() {
+  // Render only for the real request: the login check reads the current time.
+  await connection();
   const { family } = await requireFamily();
   const t = makeT(family.child_lang, { n: family.parent_call_name });
   return (
