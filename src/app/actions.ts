@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { readDocument } from "@/lib/ai/gemini";
+import { AiBusyError, readDocument } from "@/lib/ai/gemini";
 import { toParent } from "@/lib/bot/send";
 import { admin } from "@/lib/db/admin";
 import { markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
@@ -61,12 +61,18 @@ export async function createFamily(input: SetupInput): Promise<ActionResult> {
   return { ok: false, error: "save" };
 }
 
-/** The child adds a prescription photo from the web app. */
+/** Largest file the child can upload. Vercel refuses requests over 4.5 MB. */
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The child adds a prescription photo from the web app.
+ * Errors: "size" (over 4 MB), "busy" (Gemini stayed busy, try again), "read" (not read as a prescription).
+ */
 export async function uploadChildPrescription(formData: FormData): Promise<ActionResult> {
   const { family } = await requireFamily();
   const file = formData.get("photo");
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "file" };
-  if (file.size > 10 * 1024 * 1024) return { ok: false, error: "size" };
+  if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "size" };
   const bytes = await file.arrayBuffer();
   const mime = file.type || "image/jpeg";
   try {
@@ -83,6 +89,7 @@ export async function uploadChildPrescription(formData: FormData): Promise<Actio
       medicines: result.medicines,
     });
   } catch (e) {
+    if (e instanceof AiBusyError) return { ok: false, error: "busy" };
     console.error("Child prescription upload failed", e);
     return { ok: false, error: "read" };
   }

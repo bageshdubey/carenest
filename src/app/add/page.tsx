@@ -21,7 +21,7 @@ export default async function AddPage() {
       <h1 className="text-2xl leading-tight font-bold">{t("addRx")}</h1>
       <p className="text-muted-foreground">{t("photosSub")}</p>
       <PrivacyNote text={t("privacyNote")} linkLabel={t("privacy")} />
-      <AddPrescription label={t("addPhoto")} readingText={t("reading")} errorText={t("readErr")} />
+      <AddPrescription label={t("addPhoto")} readingText={t("reading")} errors={{ read: t("readErr"), busy: t("busyErr"), size: t("sizeErr") }} />
     </main>
   );
 }

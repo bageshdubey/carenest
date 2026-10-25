@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { PhotoUpload } from "./photo-upload";
+import { PhotoUpload, type UploadErrors } from "./photo-upload";
 
-export function AddPrescription(props: { label: string; readingText: string; errorText: string }) {
+export function AddPrescription(props: { label: string; readingText: string; errors: UploadErrors }) {
   const router = useRouter();
   return (
     <div className="mt-auto">
