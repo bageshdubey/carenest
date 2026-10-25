@@ -177,6 +177,12 @@ async function reply(family: FamilyRow, u: Understood, fromVoice: boolean) {
 
 async function handleDocument(family: FamilyRow, mediaId: string, mimeType: string) {
   const lang = family.parent_lang;
+  // Reading a photo can take up to a minute, so say so straight away (text only, to be quick).
+  try {
+    await toParent(family, pm(lang, "readingIt", v(family)), [], null);
+  } catch (e) {
+    console.error("Could not send the 'reading it' message", e);
+  }
   const media = await orBusy(family, async () => {
     const { bytes, mimeType: mime } = await downloadMedia(mediaId);
     return { bytes, mime: mime || mimeType, photoPath: await uploadPhoto(family.id, bytes, mime || mimeType) };

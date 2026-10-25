@@ -13,6 +13,7 @@ import { CHILD_MEALS, makeT } from "@/lib/i18n/child";
 import { pm } from "@/lib/i18n/parent";
 import { ClockIllo, FamilyIllo, IlloPanel, PhoneIllo, RxIllo } from "./illustrations";
 import { PhotoUpload } from "./photo-upload";
+import { PrivacyNote } from "./privacy-note";
 
 const CALL_NAMES = ["Amma", "Papa", "Mummy", "Aai", "Baba"];
 const PARENT_LANGS: [ParentLang, string][] = [
@@ -99,6 +100,7 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
         </IlloPanel>
         <h1 className="text-[28px] leading-tight font-bold">{t("photosQ")}</h1>
         <p className="text-[17px] leading-relaxed text-muted-foreground">{t("photosSub")}</p>
+        <PrivacyNote text={t("privacyNote")} linkLabel={t("privacy")} />
         <div className="mt-auto flex flex-col gap-2.5">
           <PhotoUpload label={t("addPhoto")} readingText={t("reading")} errorText={t("readErr")} onDone={() => router.push("/check")} />
           <Button variant="outline" size="lg" className="h-13 rounded-2xl text-[17px]" onClick={() => router.refresh()}>
