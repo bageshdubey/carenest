@@ -5,7 +5,7 @@
 CareNest analyses, it never advises. Every reply comes from the parent's own prescription and reports, never from the AI's opinion.
 
 **Live app:** https://carenestapp.vercel.app
-**Status:** Runs on the WhatsApp test number. Hindi and Marathi texts are drafts and still need a native speaker's check.
+**Status:** Runs on an Indian WhatsApp number. Hindi and Marathi texts are drafts and still need a native speaker's check.
 
 ## Contents
 
