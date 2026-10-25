@@ -80,6 +80,30 @@ describe("safety", () => {
       expect(isEmergency(t), t).toBe(false);
     }
   });
+  it("does not flag a thing that fell, or falling ill", () => {
+    for (const t of [
+      "मेरा चश्मा गिर गया था, दवाई की लिस्ट फिर से भेजो",
+      "गोली नीचे गिर गई",
+      "mera phone gir gaya",
+      "goli niche gir gayi",
+      "मी मागच्या आठवड्यात आजारी पडले होते, माझी औषधांची यादी पाठवा",
+      "मी सकाळी बाहेर पडले होते",
+    ]) {
+      expect(isEmergency(t), t).toBe(false);
+    }
+  });
+  it("still catches a person falling next to those words", () => {
+    for (const t of [
+      "मैं गिर गया",
+      "चश्मा उठाते हुए मैं गिर गई",
+      "फोन गिर गया और मैं भी गिर गई",
+      "main bathroom mein gir gaya",
+      "मी बाथरूममध्ये पडले",
+      "आजारी होते आणि मी पडले",
+    ]) {
+      expect(isEmergency(t), t).toBe(true);
+    }
+  });
   it("normalises Indian numbers", () => {
     expect(normalisePhone("98765 43210")).toBe("919876543210");
     expect(normalisePhone("+91 98765-43210")).toBe("919876543210");

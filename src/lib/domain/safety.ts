@@ -11,20 +11,20 @@ const EMERGENCY_PATTERNS: RegExp[] = [
   /\bbreathless(ness)?\b/i,
   /\b(unconscious|fainted|fainting|collapsed|stroke|heart attack|seizure)\b/i,
   /\b(heavy\s*)?bleeding\b/i,
-  // Hindi (Devanagari)
-  /गिर\s*(गई|गया|गये|गए|पड़ी|पड़ा)/,
+  // Hindi (Devanagari). Not when a thing fell ("चश्मा गिर गया", "गोली नीचे गिर गई").
+  /(?<!(?:चश्मा|चश्मे|फ़ोन|फोन|मोबाइल|गोली|दवा|दवाई|पर्चा|बोतल|चाबी|गिलास)\s+(?:(?:नीचे|ज़मीन पर|जमीन पर)\s+)?)गिर\s*(गई|गया|गये|गए|पड़ी|पड़ा)/,
   /(सीने|छाती)\s*में\s*दर्द/,
   /सांस\s*(नहीं|लेने में)/,
   /साँस\s*(नहीं|लेने में)/,
   /बेहोश/,
   /खून\s*(बह|निकल)/,
   // Hindi (romanised)
-  /\bgir\s*(gayi|gaya|gai|gya|padi|pada)\b/i,
+  /(?<!\b(?:chashma|chasma|phone|mobile|goli|dawa|dawai|bottle|chabi)\s+(?:(?:niche|neeche)\s+)?)\bgir\s*(gayi|gaya|gai|gya|padi|pada)\b/i,
   /\b(seene|chhati|chati)\s*(me|mein|main)\s*dard\b/i,
   /\b(saans|sans)\s*(nahi|nahin|lene)\b/i,
   /\bbehosh\b/i,
-  // Marathi
-  /पडल(े|ो|ी)/,
+  // Marathi. Not "आजारी पडले" (fell ill), "बाहेर पडले" (went out) or "कमी पडले" (fell short).
+  /(?<!(?:आजारी|बाहेर|कमी)\s*)पडल(े|ो|ी)/,
   /छातीत\s*दुख/,
   /श्वास\s*(घेता|लागत)/,
   /बेशुद्ध/,
