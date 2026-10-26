@@ -19,12 +19,14 @@ export default async function CheckPage() {
 
   const { data: pending } = await supabase
     .from("prescriptions")
-    .select("id")
+    .select("id, photo_path")
     .eq("family_id", family.id)
     .eq("status", "pending")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  // The child checks the list against the photo. The bucket is private, so a link that works for 1 hour.
+  const { data: signed } = pending?.photo_path ? await supabase.storage.from("uploads").createSignedUrl(pending.photo_path, 3600) : { data: null };
 
   const query = pending
     ? supabase.from("medicines").select("*").eq("prescription_id", pending.id)
@@ -46,6 +48,8 @@ export default async function CheckPage() {
         callName={family.parent_call_name}
         mode={pending ? "pending" : "active"}
         prescriptionId={pending?.id ?? null}
+        photoUrl={signed?.signedUrl ?? null}
+        photoIsPdf={!!pending?.photo_path?.endsWith(".pdf")}
         medicines={((rows ?? []) as MedicineRow[]).map(toMedicine)}
         current={((currentRows ?? []) as MedicineRow[]).map(toMedicine)}
         after={after}
