@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { type EditedMedicine, saveList } from "@/app/actions";
@@ -9,6 +10,9 @@ import { Label } from "@/components/ui/label";
 import { type DuplicateFlag, findDuplicates, medicineKey } from "@/lib/domain/duplicates";
 import type { ChildLang, Food, MealKey, Medicine } from "@/lib/domain/types";
 import { CHILD_FOOD, CHILD_MEALS, makeT, shortDate } from "@/lib/i18n/child";
+
+/** How long "List approved" shows before Home opens. */
+const DONE_MS = 1000;
 
 type Row = EditedMedicine & { needsCheck: boolean; source: Medicine["purposeSource"]; editing: boolean };
 
@@ -51,6 +55,8 @@ export function ListEditor({
   );
   const [error, setError] = useState("");
   const [saving, start] = useTransition();
+  // Set once the list is saved: the button says so for a moment before Home opens.
+  const [done, setDone] = useState(false);
   const duplicates = findDuplicates(rows, current);
   const dupNote = (i: number) => <DuplicateNote flag={duplicates[i]} lang={lang} t={t} />;
   // Ongoing medicines the new prescription does not name: the child says if each is still taken.
@@ -73,8 +79,10 @@ export function ListEditor({
     const stopIds = others.filter((m) => keep[m.id!] === false).map((m) => m.id!);
     start(async () => {
       const res = await saveList(mode, prescriptionId, live, stopIds);
-      if (res.ok) router.push(after);
-      else setError(res.error === "meals" ? t("mealNeedErr") : t("saveErr"));
+      if (res.ok) {
+        setDone(true);
+        setTimeout(() => router.push(after), DONE_MS);
+      } else setError(res.error === "meals" ? t("mealNeedErr") : t("saveErr"));
     });
   }
 
@@ -185,8 +193,9 @@ export function ListEditor({
         </p>
       ) : null}
       <div className="mt-auto pt-2">
-        <Button size="lg" className="h-12 w-full rounded-xl text-base font-bold" onClick={save} disabled={saving}>
-          {mode === "pending" ? t("approve") : t("saveList")}
+        <Button size="lg" className="h-12 w-full gap-2 rounded-xl text-base font-bold" onClick={save} disabled={saving || done} aria-live="polite">
+          {done ? <Check className="size-5 shrink-0" aria-hidden /> : saving ? <LoaderCircle className="size-5 shrink-0 animate-spin" aria-hidden /> : null}
+          {done ? t(mode === "pending" ? "listApproved" : "listSaved") : saving ? t("savingList") : t(mode === "pending" ? "approve" : "saveList")}
         </Button>
       </div>
     </div>

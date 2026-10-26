@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { AiBusyError, readDocument } from "@/lib/ai/gemini";
 import { inWindow, toParent } from "@/lib/bot/send";
 import { admin } from "@/lib/db/admin";
-import { markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
-import { toMedicine } from "@/lib/db/rows";
+import { activeMedicines, markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { istNow, mealsInOrder } from "@/lib/domain/meals";
 import { makeLinkCode, normalisePhone } from "@/lib/domain/safety";
-import type { ChildLang, Food, MealKey, Medicine, ParentLang } from "@/lib/domain/types";
+import type { ChildLang, Food, MealKey, ParentLang } from "@/lib/domain/types";
 import { listText, pm } from "@/lib/i18n/parent";
 import { currentSession, requireFamily, supabaseServer } from "@/lib/supabase/server";
 
@@ -174,28 +174,31 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
     if (error) return { ok: false, error: "save" };
   }
 
-  for (const m of clean) {
-    const row: Record<string, unknown> = {
-      name: m.name.trim(),
-      strength: m.strength.trim(),
-      quantity: m.quantity.trim() || "1 tablet",
-      meals: m.asNeeded ? [] : m.meals,
-      food: m.food,
-      needs_check: false,
-      active: true,
-      ends_on: m.asNeeded ? null : m.endsOn || null,
-      as_needed: m.asNeeded,
-    };
-    if (m.purposeChanged) {
-      const t = m.purposeText.trim();
-      row.purpose = t ? { en: t, hi: t, mr: t } : null;
-      row.purpose_source = t ? "child" : "none";
-    }
-    const { error } = m.id
-      ? await supabase.from("medicines").update(row).eq("id", m.id)
-      : await supabase.from("medicines").insert({ ...row, family_id: family.id, prescription_id: prescriptionId, purpose: row.purpose ?? null, purpose_source: row.purpose_source ?? "none" });
-    if (error) return { ok: false, error: "save" };
-  }
+  // All medicines at once: one round trip's wait instead of one per medicine.
+  const results = await Promise.all(
+    clean.map((m) => {
+      const row: Record<string, unknown> = {
+        name: m.name.trim(),
+        strength: m.strength.trim(),
+        quantity: m.quantity.trim() || "1 tablet",
+        meals: m.asNeeded ? [] : m.meals,
+        food: m.food,
+        needs_check: false,
+        active: true,
+        ends_on: m.asNeeded ? null : m.endsOn || null,
+        as_needed: m.asNeeded,
+      };
+      if (m.purposeChanged) {
+        const t = m.purposeText.trim();
+        row.purpose = t ? { en: t, hi: t, mr: t } : null;
+        row.purpose_source = t ? "child" : "none";
+      }
+      return m.id
+        ? supabase.from("medicines").update(row).eq("id", m.id)
+        : supabase.from("medicines").insert({ ...row, family_id: family.id, prescription_id: prescriptionId, purpose: row.purpose ?? null, purpose_source: row.purpose_source ?? "none" });
+    }),
+  );
+  if (results.some((r) => r.error)) return { ok: false, error: "save" };
 
   if (mode === "pending" && prescriptionId) {
     await supabase.from("prescriptions").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", prescriptionId);
@@ -208,19 +211,21 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
 
   // Tell the parent their checked list, if they are on WhatsApp and wrote in the last 24 hours
   // (outside that window WhatsApp drops a free message without telling us at once).
+  // It goes after the reply, so the child does not wait for the voice note and WhatsApp.
   if (family.parent_linked_at && inWindow(family)) {
-    try {
-      const { data } = await supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true).order("created_at");
-      const list: Medicine[] = (data ?? []).map(toMedicine);
-      const lang = family.parent_lang;
-      const vars = { n: family.parent_call_name, c: family.child_name };
-      await toParent(family, `${pm(lang, "checked", vars)}\n\n${listText(lang, list)}\n\n${pm(lang, "footer")}`, [
-        { id: "list", title: pm(lang, "q_list") },
-        { id: "doc", title: pm(lang, "q_doc") },
-      ]);
-    } catch (e) {
-      console.error("Could not send the checked list to the parent", e);
-    }
+    after(async () => {
+      try {
+        const list = await activeMedicines(family.id);
+        const lang = family.parent_lang;
+        const vars = { n: family.parent_call_name, c: family.child_name };
+        await toParent(family, `${pm(lang, "checked", vars)}\n\n${listText(lang, list)}\n\n${pm(lang, "footer")}`, [
+          { id: "list", title: pm(lang, "q_list") },
+          { id: "doc", title: pm(lang, "q_doc") },
+        ]);
+      } catch (e) {
+        console.error("Could not send the checked list to the parent", e);
+      }
+    });
   }
 
   revalidatePath("/home");
