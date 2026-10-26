@@ -19,7 +19,7 @@ const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
  * Phone camera photos are often 2 to 12 MB. This redraws a photo as a JPEG of at most 1600 px,
  * usually 200 to 500 KB. A PDF, a small photo or one the browser can't draw is sent as it is.
  */
-async function shrink(file: File): Promise<File> {
+export async function shrink(file: File): Promise<File> {
   if (!file.type.startsWith("image/") || file.size <= SHRINK_ABOVE_BYTES) return file;
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });

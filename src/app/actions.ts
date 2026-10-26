@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AiBusyError, readDocument } from "@/lib/ai/gemini";
-import { inWindow, toParent } from "@/lib/bot/send";
+import { inWindow, sendMedicinePhotos, toParent } from "@/lib/bot/send";
 import { admin } from "@/lib/db/admin";
-import { activeMedicines, markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
+import { activeMedicines, attachSamplePhotos, markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { istNow, mealsInOrder } from "@/lib/domain/meals";
 import { makeLinkCode, normalisePhone } from "@/lib/domain/safety";
 import type { ChildLang, Food, MealKey, ParentLang } from "@/lib/domain/types";
@@ -79,7 +79,7 @@ export async function uploadChildPrescription(formData: FormData): Promise<Actio
     const path = await uploadPhoto(family.id, bytes, mime);
     const result = await readDocument(bytes, mime);
     if (result.type !== "prescription") return { ok: false, error: "read" };
-    await savePrescription({
+    const rxId = await savePrescription({
       familyId: family.id,
       source: "child",
       photoPath: path,
@@ -88,12 +88,55 @@ export async function uploadChildPrescription(formData: FormData): Promise<Actio
       extracted: result.raw,
       medicines: result.medicines,
     });
+    await attachSamplePhotos(rxId);
   } catch (e) {
     if (e instanceof AiBusyError) return { ok: false, error: "busy" };
     console.error("Child prescription upload failed", e);
     return { ok: false, error: "read" };
   }
   revalidatePath("/home");
+  return { ok: true };
+}
+
+/**
+ * The child adds a photo of a medicine's strip, so the parent sees the real one in reminders.
+ * It replaces any sample photo from the web. Errors: "file", "size", "save".
+ */
+export async function uploadStripPhoto(formData: FormData): Promise<ActionResult> {
+  const { supabase, family } = await requireFamily();
+  const medicineId = formData.get("medicineId");
+  const file = formData.get("photo");
+  if (typeof medicineId !== "string" || !UUID.test(medicineId)) return { ok: false, error: "save" };
+  if (!(file instanceof File) || file.size === 0 || !file.type.startsWith("image/")) return { ok: false, error: "file" };
+  if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "size" };
+  const { data: med } = await supabase.from("medicines").select("id").eq("id", medicineId).eq("family_id", family.id).maybeSingle();
+  if (!med) return { ok: false, error: "save" };
+  try {
+    const path = await uploadPhoto(family.id, await file.arrayBuffer(), file.type);
+    const { error } = await supabase
+      .from("medicines")
+      .update({ photo_kind: "real", photo_path: path, photo_url: null, photo_source: null })
+      .eq("id", medicineId);
+    if (error) return { ok: false, error: "save" };
+  } catch (e) {
+    console.error("Strip photo upload failed", e);
+    return { ok: false, error: "save" };
+  }
+  revalidatePath("/check");
+  return { ok: true };
+}
+
+/** The child takes a wrong photo off a medicine. The medicine then shows its name only. */
+export async function removeMedicinePhoto(medicineId: string): Promise<ActionResult> {
+  const { supabase, family } = await requireFamily();
+  if (!UUID.test(medicineId)) return { ok: false, error: "save" };
+  const { error } = await supabase
+    .from("medicines")
+    .update({ photo_kind: null, photo_path: null, photo_url: null, photo_source: null })
+    .eq("id", medicineId)
+    .eq("family_id", family.id);
+  if (error) return { ok: false, error: "save" };
+  revalidatePath("/check");
   return { ok: true };
 }
 
@@ -218,6 +261,7 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
         const list = await activeMedicines(family.id);
         const lang = family.parent_lang;
         const vars = { n: family.parent_call_name, c: family.child_name };
+        await sendMedicinePhotos(family, list);
         await toParent(family, `${pm(lang, "checked", vars)}\n\n${listText(lang, list)}\n\n${pm(lang, "footer")}`, [
           { id: "list", title: pm(lang, "q_list") },
           { id: "doc", title: pm(lang, "q_doc") },

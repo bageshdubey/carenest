@@ -1,4 +1,4 @@
-import type { ChildLang, Food, MealKey, MealTimes, Medicine, ParentLang, Purpose, RangeFlag, ReportValue } from "@/lib/domain/types";
+import type { ChildLang, Food, MealKey, MealTimes, Medicine, MedicinePhoto, ParentLang, Purpose, RangeFlag, ReportValue } from "@/lib/domain/types";
 
 export type FamilyRow = {
   id: string;
@@ -50,6 +50,11 @@ export type MedicineRow = {
   ends_on?: string | null;
   /** "Only when needed" (SOS). Missing until migration 0007 has run. */
   as_needed?: boolean;
+  /** Picture of the medicine. Missing until migration 0011 has run. */
+  photo_kind?: "real" | "sample" | null;
+  photo_path?: string | null;
+  photo_url?: string | null;
+  photo_source?: string | null;
 };
 
 export type ReportValueRow = {
@@ -83,7 +88,14 @@ export function toMedicine(r: MedicineRow): Medicine {
     needsCheck: r.needs_check,
     endsOn: r.ends_on ?? null,
     asNeeded: r.as_needed ?? false,
+    photo: toPhoto(r),
   };
+}
+
+function toPhoto(r: MedicineRow): MedicinePhoto | null {
+  if (r.photo_kind === "real" && r.photo_path) return { kind: "real", path: r.photo_path, url: null, source: null };
+  if (r.photo_kind === "sample" && r.photo_url) return { kind: "sample", path: null, url: r.photo_url, source: r.photo_source ?? null };
+  return null;
 }
 
 export function fromMedicine(familyId: string, prescriptionId: string | null, m: Medicine) {

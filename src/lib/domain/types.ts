@@ -24,7 +24,15 @@ export type Medicine = {
   endsOn?: string | null;
   /** "Only when needed" (SOS): on the list, never reminded. */
   asNeeded?: boolean;
+  /** What the medicine looks like, so a parent who can't read the name can find the strip. */
+  photo?: MedicinePhoto | null;
 };
+
+/**
+ * "real": the child's photo of the strip (`path` in the private uploads bucket).
+ * "sample": a photo found on the web for the name (`url`), which may not match the parent's strip.
+ */
+export type MedicinePhoto = { kind: "real" | "sample"; path: string | null; url: string | null; source: string | null };
 
 export type DoseStatus = "sent" | "taken" | "missed";
 
