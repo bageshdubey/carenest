@@ -103,7 +103,8 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
         <PrivacyNote text={t("privacyNote")} linkLabel={t("privacy")} />
         <div className="mt-auto flex flex-col gap-2.5">
           <PhotoUpload
-            label={t("addPhoto")}
+            cameraLabel={t("takePhoto")}
+            pickLabel={t("choosePhoto")}
             readingText={t("reading")}
             errors={{ read: t("readErr"), busy: t("busyErr"), size: t("sizeErr") }}
             onDone={() => router.push("/check")}
