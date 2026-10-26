@@ -37,6 +37,11 @@ export function sendText(to: string, body: string) {
   return post({ to, type: "text", text: { body, preview_url: false } });
 }
 
+/** A photo WhatsApp fetches from a public https link, with words under it (at most 1,024 characters). */
+export function sendImage(to: string, link: string, caption: string) {
+  return post({ to, type: "image", image: { link, caption: caption.slice(0, 1024) } });
+}
+
 export type Button = { id: string; title: string };
 
 /** Up to 3 reply buttons. Titles are cut to WhatsApp's 20-character limit. */

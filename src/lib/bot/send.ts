@@ -1,11 +1,11 @@
 import "server-only";
 import type { FamilyRow } from "@/lib/db/rows";
-import { addAlert, logMessage } from "@/lib/db/repo";
+import { addAlert, logMessage, photoLink } from "@/lib/db/repo";
 import { speak } from "@/lib/ai/sarvam";
 import { VOICE_NOTE_MAX_BYTES, toVoiceNote } from "@/lib/audio";
-import { type Button, sendButtons, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
+import { type Button, sendButtons, sendImage, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
 import { splitMessage } from "@/lib/whatsapp/split";
-import type { ChildLang, MealKey } from "@/lib/domain/types";
+import type { ChildLang, MealKey, Medicine } from "@/lib/domain/types";
 import { fill, pm } from "@/lib/i18n/parent";
 
 /** WhatsApp allows at most 1,024 characters in a message with buttons. */
@@ -66,6 +66,31 @@ export async function toParent(family: FamilyRow, body: string, buttons: Button[
   }
   await logMessage(family.id, "out", body, null, id);
   return id;
+}
+
+/**
+ * One photo per medicine, with its name and how many to take under it, so a parent who can't read
+ * the name can match the strip. A sample from the web says it may not look like their strip.
+ * Only inside the 24-hour window (a free message). Never throws: the text reminder still goes.
+ */
+export async function sendMedicinePhotos(family: FamilyRow, meds: Medicine[]) {
+  const lang = family.parent_lang;
+  for (const m of meds) {
+    if (!m.photo) continue;
+    try {
+      const link = await photoLink(m.photo);
+      if (!link) continue;
+      const name = `${m.name} ${m.strength}`.trim();
+      const caption =
+        m.photo.kind === "sample"
+          ? pm(lang, "photoSample", { m: name, q: m.quantity, s: m.photo.source ?? "" })
+          : pm(lang, "photoReal", { m: name, q: m.quantity });
+      const id = await sendImage(family.parent_phone, link, caption);
+      await logMessage(family.id, "out", `[Photo] ${caption}`, null, id);
+    } catch (e) {
+      console.error(`Medicine photo not sent for ${m.name}`, e);
+    }
+  }
 }
 
 /**

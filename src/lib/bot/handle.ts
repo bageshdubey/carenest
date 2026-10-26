@@ -3,6 +3,7 @@ import { AiBusyError, type Understood, canRead, readDocument, understand } from 
 import {
   activeMedicines,
   addPhotoVisit,
+  attachSamplePhotos,
   familyByCode,
   familyByParentPhone,
   hasPendingPrescription,
@@ -214,7 +215,7 @@ async function handleDocument(family: FamilyRow, mediaId: string, mimeType: stri
   }
 
   if (result.type === "prescription") {
-    await savePrescription({
+    const rxId = await savePrescription({
       familyId: family.id,
       source: "parent",
       photoPath,
@@ -224,6 +225,8 @@ async function handleDocument(family: FamilyRow, mediaId: string, mimeType: stri
       medicines: result.medicines,
     });
     await toParent(family, pm(lang, "gotRx", v(family)));
+    // Before the child is told, so the Check screen already has the photos.
+    await attachSamplePhotos(rxId);
     await alertChild(family, "new_list");
     return;
   }

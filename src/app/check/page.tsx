@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { BackLink } from "@/components/app/back-link";
-import { ListEditor } from "@/components/app/list-editor";
+import { ListEditor, type ShownPhoto } from "@/components/app/list-editor";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { type MedicineRow, toMedicine } from "@/lib/db/rows";
 import { makeT } from "@/lib/i18n/child";
@@ -32,6 +32,16 @@ export default async function CheckPage() {
     ? supabase.from("medicines").select("*").eq("prescription_id", pending.id)
     : supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true);
   const { data: rows } = await query.order("created_at");
+  const medicines = ((rows ?? []) as MedicineRow[]).map(toMedicine);
+  // A strip photo the child took is in the private bucket, so it gets a 1-hour link; a sample is already a web link.
+  const realPaths = medicines.flatMap((m) => (m.photo?.kind === "real" && m.photo.path ? [m.photo.path] : []));
+  const { data: signedPhotos } = realPaths.length ? await supabase.storage.from("uploads").createSignedUrls(realPaths, 3600) : { data: [] };
+  const photos: Record<string, ShownPhoto> = {};
+  for (const m of medicines) {
+    if (!m.id || !m.photo) continue;
+    const src = m.photo.kind === "sample" ? m.photo.url : (signedPhotos ?? []).find((s) => s.path === m.photo?.path)?.signedUrl;
+    if (src) photos[m.id] = { src, kind: m.photo.kind, source: m.photo.source };
+  }
   // A new prescription is added to the current list, so its medicines are compared with that list.
   const { data: currentRows } = pending
     ? await supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true).order("created_at")
@@ -50,7 +60,8 @@ export default async function CheckPage() {
         prescriptionId={pending?.id ?? null}
         photoUrl={signed?.signedUrl ?? null}
         photoIsPdf={!!pending?.photo_path?.endsWith(".pdf")}
-        medicines={((rows ?? []) as MedicineRow[]).map(toMedicine)}
+        medicines={medicines}
+        photos={photos}
         current={((currentRows ?? []) as MedicineRow[]).map(toMedicine)}
         after={after}
       />

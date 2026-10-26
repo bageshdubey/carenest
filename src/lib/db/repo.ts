@@ -1,6 +1,7 @@
 import "server-only";
 import { LATER_MIN, MAX_LATER, type OpenDose } from "@/lib/domain/meals";
-import type { MealKey, Medicine, ReportValue } from "@/lib/domain/types";
+import type { MealKey, Medicine, MedicinePhoto, ReportValue } from "@/lib/domain/types";
+import { findSamplePhoto } from "@/lib/photos/search";
 import { admin } from "./admin";
 import { type FamilyRow, type MedicineRow, type ReportValueRow, type VisitRow, fromMedicine, toMedicine, toReportValue } from "./rows";
 
@@ -104,6 +105,37 @@ export async function savePrescription(input: {
     must(await admin().from("medicines").insert(input.medicines.map((m) => fromMedicine(input.familyId, rx.id, m))));
   }
   return rx.id;
+}
+
+/**
+ * Gives each medicine of a new prescription a sample photo from the web, so the child sees one on the
+ * Check screen. Never throws: without a photo the medicine shows its name only.
+ */
+export async function attachSamplePhotos(prescriptionId: string) {
+  try {
+    const meds = must(await admin().from("medicines").select("id,name,strength").eq("prescription_id", prescriptionId)) as {
+      id: string;
+      name: string;
+      strength: string;
+    }[];
+    await Promise.all(
+      meds.map(async (m) => {
+        const found = await findSamplePhoto(m.name, m.strength);
+        if (!found) return;
+        must(await admin().from("medicines").update({ photo_kind: "sample", photo_url: found.url, photo_source: found.source }).eq("id", m.id).is("photo_kind", null));
+      }),
+    );
+  } catch (e) {
+    console.error("Could not add sample photos", e);
+  }
+}
+
+/** A link WhatsApp can fetch: the web address of a sample, or a 1-hour private link to the child's photo. */
+export async function photoLink(photo: MedicinePhoto): Promise<string | null> {
+  if (photo.kind === "sample") return photo.url;
+  if (!photo.path) return null;
+  const res = await admin().storage.from("uploads").createSignedUrl(photo.path, 3600);
+  return res.data?.signedUrl ?? null;
 }
 
 /** Previous value of each test, from the most recent earlier report, keyed by lower-case test name. */

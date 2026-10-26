@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, LoaderCircle } from "lucide-react";
+import { Camera, Check, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { type EditedMedicine, saveList } from "@/app/actions";
+import { useRef, useState, useTransition } from "react";
+import { type EditedMedicine, removeMedicinePhoto, saveList, uploadStripPhoto } from "@/app/actions";
+import { shrink } from "@/components/app/photo-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ export function ListEditor({
   prescriptionId,
   photoUrl = null,
   photoIsPdf = false,
+  photos = {},
   medicines,
   current,
   after,
@@ -34,6 +36,8 @@ export function ListEditor({
   /** Link to the prescription photo or PDF the list was read from, or null. */
   photoUrl?: string | null;
   photoIsPdf?: boolean;
+  /** Each medicine's picture, by medicine id. */
+  photos?: Record<string, ShownPhoto>;
   medicines: Medicine[];
   /** The approved list a new prescription will join; empty when editing that list itself. */
   current: Medicine[];
@@ -64,6 +68,8 @@ export function ListEditor({
   const [done, setDone] = useState(false);
   const duplicates = findDuplicates(rows, current);
   const dupNote = (i: number) => <DuplicateNote flag={duplicates[i]} lang={lang} t={t} />;
+  // Only a saved medicine can hold a photo; one the child adds here gets its id when the list is saved.
+  const photoBox = (r: Row) => (r.id ? <StripPhoto medicineId={r.id} photo={photos[r.id] ?? null} t={t} /> : null);
   // Ongoing medicines the new prescription does not name: the child says if each is still taken.
   const newKeys = new Set(rows.filter((r) => r.name.trim()).map((r) => medicineKey(r.name)));
   const others = mode === "pending" ? current.filter((m) => m.id && !newKeys.has(medicineKey(m.name))) : [];
@@ -116,6 +122,7 @@ export function ListEditor({
             {r.needsCheck && <span className="self-start rounded-full bg-warn-soft px-2.5 py-0.5 text-xs font-bold text-warn">{t("pleaseCheck")}</span>}
             <Field id={`name_${i}`} label={t("medName")} value={r.name} onChange={(v) => update(i, { name: v })} />
             {dupNote(i)}
+            {photoBox(r)}
             <div className="grid grid-cols-2 gap-2">
               <Field id={`strength_${i}`} label={t("medStrength")} value={r.strength} onChange={(v) => update(i, { strength: v })} />
               <Field id={`qty_${i}`} label={t("medQty")} value={r.quantity} onChange={(v) => update(i, { quantity: v })} />
@@ -173,6 +180,7 @@ export function ListEditor({
                 {r.purposeText && !r.purposeChanged && r.source === "prescription" ? ` (${t("fromRx")})` : ""}
               </p>
               {dupNote(i)}
+              {photoBox(r)}
             </div>
             <Button variant="outline" size="sm" className="rounded-lg" onClick={() => update(i, { editing: true })}>
               {t("edit")}
@@ -217,6 +225,75 @@ export function ListEditor({
           {done ? t(mode === "pending" ? "listApproved" : "listSaved") : saving ? t("savingList") : t(mode === "pending" ? "approve" : "saveList")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+export type ShownPhoto = { src: string; kind: "real" | "sample"; source: string | null };
+
+/**
+ * The medicine's picture, which the parent also gets with each reminder. A sample from the web says so;
+ * the child can replace it with a photo of the real strip, or take a wrong one off.
+ */
+function StripPhoto({ medicineId, photo, t }: { medicineId: string; photo: ShownPhoto | null; t: ReturnType<typeof makeT> }) {
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, start] = useTransition();
+  const [error, setError] = useState("");
+
+  function upload(file: File | undefined) {
+    if (!file) return;
+    setError("");
+    start(async () => {
+      const form = new FormData();
+      form.append("medicineId", medicineId);
+      form.append("photo", await shrink(file));
+      const res = await uploadStripPhoto(form);
+      if (res.ok) router.refresh();
+      else setError(t("stripPhotoErr"));
+    });
+  }
+
+  function remove() {
+    setError("");
+    start(async () => {
+      const res = await removeMedicinePhoto(medicineId);
+      if (res.ok) router.refresh();
+      else setError(t("stripPhotoErr"));
+    });
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      {photo ? (
+        <div className="flex items-start gap-3">
+          <a href={photo.src} target="_blank" rel="noopener noreferrer" className="shrink-0">
+            {/* A web or private signed link, so next/image (which needs fixed hosts) is not used. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photo.src} alt={t("stripPhotoAlt")} className="size-20 rounded-xl bg-muted object-contain" />
+          </a>
+          {photo.kind === "sample" ? <p className="text-xs text-warn">{t("samplePhoto", { s: photo.source ?? "" })}</p> : null}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">{t("noStripPhoto")}</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
+        <Button variant="outline" size="sm" className="gap-1.5 rounded-lg" disabled={busy} onClick={() => input.current?.click()}>
+          {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />}
+          {photo?.kind === "real" ? t("changeStripPhoto") : t("addStripPhoto")}
+        </Button>
+        {photo ? (
+          <Button variant="outline" size="sm" className="rounded-lg" disabled={busy} onClick={remove}>
+            {t("removePhoto")}
+          </Button>
+        ) : null}
+      </div>
+      {error ? (
+        <p role="alert" className="text-xs text-bad">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

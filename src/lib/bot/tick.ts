@@ -19,7 +19,7 @@ import { mealTimes } from "@/lib/db/rows";
 import { MISSED_AFTER_MIN, doseStep, dueReminders, istNow, medicinesFor, toMinutes } from "@/lib/domain/meals";
 import type { MealKey, Medicine } from "@/lib/domain/types";
 import { doctorQuestions, mealName, pm, reminderLines, visitText } from "@/lib/i18n/parent";
-import { alertChild, inWindow, reminderToParent, toParent } from "./send";
+import { alertChild, inWindow, reminderToParent, sendMedicinePhotos, toParent } from "./send";
 
 /**
  * Runs every few minutes (called by Supabase pg_cron):
@@ -100,12 +100,14 @@ export async function tick(now: Date = new Date()) {
  */
 async function sendMealReminder(family: FamilyRow, date: string, meal: MealKey, meds: Medicine[]): Promise<boolean> {
   const lang = family.parent_lang;
-  const body = pm(lang, "reminder", {
+  const body = `${pm(lang, "reminder", {
     meal: mealName(lang, meal),
     n: family.parent_call_name,
     c: family.child_name,
     lines: reminderLines(lang, meal, meds),
-  });
+  })}\n${pm(lang, "matchName")}`;
+  // Photos first, so the reminder with its Taken button is the last message. Outside the window only the template goes.
+  if (inWindow(family)) await sendMedicinePhotos(family, medicinesFor(meal, meds));
   const oneLine = medicinesFor(meal, meds)
     .map((m) => `${m.name} ${m.strength}`)
     .join(", ");
