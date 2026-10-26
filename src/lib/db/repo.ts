@@ -203,8 +203,18 @@ export async function mealsSentToday(familyId: string, date: string): Promise<Se
   return new Set(rows.map((r) => r.meal));
 }
 
-export async function recordReminder(familyId: string, date: string, meal: MealKey) {
-  must(await admin().from("doses").upsert({ family_id: familyId, dose_date: date, meal, status: "sent" }, { onConflict: "family_id,dose_date,meal", ignoreDuplicates: true }));
+/**
+ * Claims today's reminder for this meal before it is sent. False when another run already claimed it,
+ * so two overlapping scheduler runs never send the same reminder twice.
+ */
+export async function claimReminder(familyId: string, date: string, meal: MealKey): Promise<boolean> {
+  const rows = must(
+    await admin()
+      .from("doses")
+      .upsert({ family_id: familyId, dose_date: date, meal, status: "sent" }, { onConflict: "family_id,dose_date,meal", ignoreDuplicates: true })
+      .select("id"),
+  ) as { id: string }[];
+  return rows.length > 0;
 }
 
 export async function markTaken(familyId: string, date: string, meal: MealKey): Promise<boolean> {

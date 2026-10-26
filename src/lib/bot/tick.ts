@@ -2,6 +2,7 @@ import "server-only";
 import {
   activeMedicines,
   claimFollowup,
+  claimReminder,
   claimResend,
   latestReportValues,
   linkedFamilies,
@@ -9,7 +10,6 @@ import {
   markVisitReminded,
   mealsSentToday,
   openDoses,
-  recordReminder,
   stopEndedCourses,
   visitsOn,
 } from "@/lib/db/repo";
@@ -49,9 +49,9 @@ export async function tick(now: Date = new Date()) {
     const due = dueReminders(mealTimes(family), meds, await mealsSentToday(family.id, date), now);
     for (const meal of due) {
       try {
+        // Claimed before sending, so an overlapping run skips it, and one that could not go is not tried again every few minutes.
+        if (!(await claimReminder(family.id, date, meal))) continue;
         const delivered = await sendMealReminder(family, date, meal, meds);
-        // Recorded either way, so a reminder that could not go is not tried again every few minutes.
-        await recordReminder(family.id, date, meal);
         if (delivered) sent++;
         else await alertChild(family, "reminder_not_sent", { meal });
       } catch (e) {
@@ -145,13 +145,17 @@ async function visitReminders(family: FamilyRow, now: Date) {
   const vars = { n: family.parent_call_name, c: family.child_name };
   for (const visit of await visitsOn(family.id, [date, tomorrow])) {
     if (visit.visit_date === tomorrow && !visit.evening_sent_at && inMealWindow(family.meal_d, minutes)) {
-      await toParent(family, visitText(lang, "visitEve", visit, vars));
       await markVisitReminded(visit.id, "evening");
+      if (inWindow(family)) await toParent(family, visitText(lang, "visitEve", visit, vars));
+      else await alertChild(family, "reminder_not_sent");
     }
     if (visit.visit_date === date && !visit.morning_sent_at && inMealWindow(family.meal_b, minutes)) {
-      const questions = doctorQuestions(lang, family.child_name, await latestReportValues(family.id));
-      await toParent(family, `${visitText(lang, "visitMorning", visit, vars)}\n\n${questions}`);
       await markVisitReminded(visit.id, "morning");
+      // Outside the 24-hour window WhatsApp refuses a free message, and only says so later, so the child is told now.
+      if (inWindow(family)) {
+        const questions = doctorQuestions(lang, family.child_name, await latestReportValues(family.id));
+        await toParent(family, `${visitText(lang, "visitMorning", visit, vars)}\n\n${questions}`);
+      } else await alertChild(family, "reminder_not_sent");
     }
   }
 }

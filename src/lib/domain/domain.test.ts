@@ -59,6 +59,17 @@ describe("report ranges", () => {
     expect(parseRange("1,000 - 4,000")).toEqual({ low: 1000, high: 4000 });
     expect(parseRange("Negative")).toEqual({ low: null, high: null });
   });
+  it("gives no range when several are printed, instead of picking one", () => {
+    for (const r of [
+      "Male: 13.0-17.0 Female: 12.0-15.0",
+      "Desirable: <200 Borderline: 200-239 High: >=240",
+      "Normal: <100, Prediabetes: 100-125, Diabetes: >=126",
+    ]) {
+      expect(parseRange(r), r).toEqual({ low: null, high: null });
+    }
+    expect(parseRange("Non-diabetic: < 5.7 %")).toEqual({ low: null, high: 5.7 });
+    expect(parseRange("4.0 - 11.0 x10^3/uL")).toEqual({ low: 4, high: 11 });
+  });
   it("flags values in code", () => {
     expect(flagValue(7.2, 4, 5.6)).toBe("high");
     expect(flagValue(3.1, 4, 5.6)).toBe("low");
@@ -104,6 +115,27 @@ describe("safety", () => {
       expect(isEmergency(t), t).toBe(true);
     }
   });
+  it("catches breathing, chest, overdose and self-harm words", () => {
+    for (const t of [
+      "I can’t breathe",
+      "difficulty breathing since night",
+      "my chest hurts",
+      "chest is very tight",
+      "छाती में बहुत दर्द है",
+      "I took my tablets twice by mistake",
+      "took the bp tablet double",
+      "overdose",
+      "I want to die",
+      "photo of my phone fell and Papa fell too",
+    ]) {
+      expect(isEmergency(t), t).toBe(true);
+    }
+  });
+  it("does not flag a thing that fell, falling ill, no pain, or finding something", () => {
+    for (const t of ["my phone fell", "the tablet fell under the bed", "I fell ill last week", "no chest pain today, feeling good", "गोळी सापडली", "माझा चष्मा सापडला"]) {
+      expect(isEmergency(t), t).toBe(false);
+    }
+  });
   it("normalises Indian numbers", () => {
     expect(normalisePhone("98765 43210")).toBe("919876543210");
     expect(normalisePhone("+91 98765-43210")).toBe("919876543210");
@@ -112,6 +144,10 @@ describe("safety", () => {
   it("finds link codes", () => {
     expect(findLinkCode("Hi CareNest cn-4821")).toBe("CN-4821");
     expect(findLinkCode("Hi")).toBeNull();
+    expect(findLinkCode("Hi CareNest CN 4821")).toBe("CN-4821");
+    expect(findLinkCode("cn4821")).toBe("CN-4821");
+    expect(findLinkCode("CN–4821")).toBe("CN-4821");
+    expect(findLinkCode("CN-48210")).toBeNull();
   });
 });
 

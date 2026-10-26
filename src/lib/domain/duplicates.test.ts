@@ -10,6 +10,14 @@ describe("medicine names", () => {
     expect(medicineKey("Metformin SR 500 mg")).toBe("metformin sr");
   });
 
+  it("treats the same medicine at two strengths, or written as T. or with a dash, as one", () => {
+    expect(medicineKey("T. Amlodipine 5 mg")).toBe("amlodipine");
+    expect(medicineKey("Amlodipine-5")).toBe("amlodipine");
+    expect(medicineKey("Telma 40")).toBe(medicineKey("Tab Telma 80"));
+    expect(medicineKey("Vitamin B12")).toBe("vitamin b12");
+    expect(medicineKey("Telma")).not.toBe(medicineKey("Telmisartan"));
+  });
+
   it("never treats a brand as its generic", () => {
     expect(medicineKey("Amlopress")).not.toBe(medicineKey("Amlodipine"));
   });

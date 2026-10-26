@@ -216,7 +216,7 @@ function Field({ id, label, value, onChange, type = "text" }: { id: string; labe
       <Label htmlFor={id} className="text-xs text-muted-foreground">
         {label}
       </Label>
-      <Input id={id} type={type} className="h-11 text-base" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input id={id} type={type} maxLength={200} className="h-11 text-base" value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

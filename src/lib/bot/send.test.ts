@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FamilyRow } from "@/lib/db/rows";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/db/repo", () => ({ addAlert: vi.fn(), logMessage: vi.fn() }));
+const addAlert = vi.fn();
+vi.mock("@/lib/db/repo", () => ({ addAlert, logMessage: vi.fn() }));
 vi.mock("@/lib/ai/sarvam", () => ({ speak: vi.fn().mockResolvedValue(null) }));
 vi.mock("@/lib/audio", () => ({ VOICE_NOTE_MAX_BYTES: 512 * 1024, toVoiceNote: vi.fn() }));
 
-const { reminderToParent } = await import("./send");
+const { alertChild, reminderToParent, toParent } = await import("./send");
 
 const HOUR = 60 * 60 * 1000;
 const family = (lastMessageHoursAgo: number): FamilyRow => ({
@@ -69,5 +70,24 @@ describe("meal reminder outside the 24-hour window", () => {
     vi.stubEnv("WHATSAPP_TEMPLATE_REMINDER", "carenest_meal_reminder");
     expect(await reminderToParent(family(2), "body", buttons, params)).toBe(true);
     expect(JSON.parse(fetch.mock.calls[0][1].body).type).toBe("interactive");
+  });
+});
+
+describe("long messages to the parent", () => {
+  it("sends a text over WhatsApp's 4,096 characters as several messages, each within the limit", async () => {
+    const body = Array.from({ length: 10 }, (_, i) => `• Medicine ${i} ${"x".repeat(600)}`).join("\n\n");
+    await toParent(family(30), body);
+    const texts = fetch.mock.calls.map((c) => JSON.parse(c[1].body).text.body as string);
+    expect(texts.length).toBeGreaterThan(1);
+    expect(texts.every((t) => t.length <= 4096)).toBe(true);
+    expect(texts.join("\n\n")).toBe(body);
+  });
+});
+
+describe("alerts for the child", () => {
+  it("keeps the parent's own words as they are, even with placeholders or $ signs", async () => {
+    addAlert.mockClear();
+    await alertChild(family(1), "advice_question", { q: "can I take {p} or $' tablets?" });
+    expect(addAlert.mock.calls[0][3].text).toBe('CareNest: Papa asked "can I take {p} or $\' tablets?". They were told to ask the doctor or call you.');
   });
 });
