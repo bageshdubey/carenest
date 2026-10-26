@@ -1,6 +1,6 @@
 import "server-only";
 import type { FamilyRow } from "@/lib/db/rows";
-import { addAlert, logMessage, photoLink } from "@/lib/db/repo";
+import { activeMedicines, addAlert, fillMissingPhotos, logMessage, photoLink } from "@/lib/db/repo";
 import { speak } from "@/lib/ai/sarvam";
 import { VOICE_NOTE_MAX_BYTES, toVoiceNote } from "@/lib/audio";
 import { type Button, sendButtons, sendImage, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
@@ -75,6 +75,16 @@ export async function toParent(family: FamilyRow, body: string, buttons: Button[
  */
 export async function sendMedicinePhotos(family: FamilyRow, meds: Medicine[]) {
   const lang = family.parent_lang;
+  // A medicine with no photo yet (typed in by the child, or saved before photos) gets a sample first.
+  if (meds.some((m) => m.id && !m.photo)) {
+    try {
+      await fillMissingPhotos(family.id);
+      const fresh = new Map((await activeMedicines(family.id)).map((m) => [m.id, m]));
+      meds = meds.map((m) => (m.id && fresh.get(m.id)) || m);
+    } catch (e) {
+      console.error("Could not fill missing photos", e);
+    }
+  }
   for (const m of meds) {
     if (!m.photo) continue;
     try {

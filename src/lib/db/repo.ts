@@ -112,17 +112,33 @@ export async function savePrescription(input: {
  * Check screen. Never throws: without a photo the medicine shows its name only.
  */
 export async function attachSamplePhotos(prescriptionId: string) {
+  await searchMissingPhotos({ prescription_id: prescriptionId });
+}
+
+/**
+ * Gives every approved medicine of the family that has no photo a sample from the web, e.g. one the
+ * child typed in, or one saved before photos existed. Each medicine is searched only once.
+ */
+export async function fillMissingPhotos(familyId: string) {
+  await searchMissingPhotos({ family_id: familyId, active: true });
+}
+
+/**
+ * Searches only medicines never searched: photo_source is "none" when nothing was found and "removed"
+ * when the child took a wrong photo off, so neither costs a search at every reminder. A search that
+ * could not run (no key, Serper down) marks nothing, so it is tried again next time. Never throws.
+ */
+async function searchMissingPhotos(match: Record<string, string | boolean>) {
   try {
-    const meds = must(await admin().from("medicines").select("id,name,strength").eq("prescription_id", prescriptionId)) as {
-      id: string;
-      name: string;
-      strength: string;
-    }[];
+    const meds = must(
+      await admin().from("medicines").select("id,name,strength").match(match).is("photo_kind", null).is("photo_source", null),
+    ) as { id: string; name: string; strength: string }[];
     await Promise.all(
       meds.map(async (m) => {
         const found = await findSamplePhoto(m.name, m.strength);
-        if (!found) return;
-        must(await admin().from("medicines").update({ photo_kind: "sample", photo_url: found.url, photo_source: found.source }).eq("id", m.id).is("photo_kind", null));
+        if (found === undefined) return;
+        const patch = found ? { photo_kind: "sample", photo_url: found.url, photo_source: found.source } : { photo_source: "none" };
+        must(await admin().from("medicines").update(patch).eq("id", m.id).is("photo_kind", null));
       }),
     );
   } catch (e) {
