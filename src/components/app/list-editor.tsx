@@ -21,6 +21,8 @@ export function ListEditor({
   callName,
   mode,
   prescriptionId,
+  photoUrl = null,
+  photoIsPdf = false,
   medicines,
   current,
   after,
@@ -29,6 +31,9 @@ export function ListEditor({
   callName: string;
   mode: "pending" | "active";
   prescriptionId: string | null;
+  /** Link to the prescription photo or PDF the list was read from, or null. */
+  photoUrl?: string | null;
+  photoIsPdf?: boolean;
   medicines: Medicine[];
   /** The approved list a new prescription will join; empty when editing that list itself. */
   current: Medicine[];
@@ -90,6 +95,20 @@ export function ListEditor({
     <div className="flex flex-1 flex-col gap-3">
       <h1 className="text-2xl leading-tight font-bold">{mode === "pending" ? t("checkTitle") : t("editTitle")}</h1>
       {mode === "pending" && <p className="text-muted-foreground">{t("checkSub")}</p>}
+      {mode === "pending" && photoUrl ? (
+        photoIsPdf ? (
+          <Button variant="outline" className="h-11 self-start rounded-xl" nativeButton={false} render={<a href={photoUrl} target="_blank" rel="noopener noreferrer" />}>
+            {t("seeRx")}
+          </Button>
+        ) : (
+          <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="flex flex-col gap-1">
+            {/* A private signed link, so next/image (which needs fixed hosts) is not used. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoUrl} alt={t("seeRx")} className="max-h-[33vh] w-full rounded-2xl bg-card object-contain" />
+            <span className="text-xs text-muted-foreground">{t("tapToZoom")}</span>
+          </a>
+        )
+      ) : null}
 
       {rows.map((r, i) =>
         r.editing ? (
