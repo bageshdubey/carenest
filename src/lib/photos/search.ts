@@ -29,12 +29,14 @@ function hostOf(url: string | undefined): string | null {
 
 /**
  * Looks up a sample photo of the medicine's strip on the web, e.g. "Telma 40 tablet strip".
- * Null when there is no key, no result, or the search fails: the medicine then shows its name only.
+ * Null when the search found nothing usable; undefined when it could not run (no key, or it failed),
+ * so the caller can try again later. Without a photo the medicine shows its name only.
  */
-export async function findSamplePhoto(name: string, strength: string): Promise<SamplePhoto | null> {
+export async function findSamplePhoto(name: string, strength: string): Promise<SamplePhoto | null | undefined> {
   const key = process.env.SERPERAPI_KEY;
   const q = `${name} ${strength}`.trim();
-  if (!key || !q) return null;
+  if (!q) return null;
+  if (!key) return undefined;
   try {
     const res = await fetch(SERPER_IMAGES, {
       method: "POST",
@@ -44,12 +46,12 @@ export async function findSamplePhoto(name: string, strength: string): Promise<S
     });
     if (!res.ok) {
       console.error(`Sample photo search failed: HTTP ${res.status}`);
-      return null;
+      return undefined;
     }
     const json = (await res.json()) as { images?: SerperImage[] };
     return pickSample(json.images ?? []);
   } catch (e) {
     console.error("Sample photo search failed", e);
-    return null;
+    return undefined;
   }
 }

@@ -28,7 +28,7 @@ import type { MealKey } from "@/lib/domain/types";
 import { doctorQuestions, listText, mealName, pm, reminderLines, reportText, visitText } from "@/lib/i18n/parent";
 import { downloadMedia, sendText } from "@/lib/whatsapp/client";
 import type { Incoming } from "@/lib/whatsapp/webhook";
-import { alertChild, toParent } from "./send";
+import { alertChild, sendMedicinePhotos, toParent } from "./send";
 
 const v = (f: FamilyRow) => ({ n: f.parent_call_name, c: f.child_name });
 
@@ -74,6 +74,7 @@ export async function handleIncoming(msg: Incoming) {
     await toParent(family, pm(family.parent_lang, "welcome", v(family)));
     const meds = await activeMedicines(family.id);
     if (meds.length) {
+      await sendMedicinePhotos(family, meds);
       await toParent(family, `${pm(family.parent_lang, "already", v(family))}\n\n${listText(family.parent_lang, meds)}\n\n${pm(family.parent_lang, "footer")}`, menu(family));
     }
     return;
@@ -176,6 +177,7 @@ async function reply(family: FamilyRow, u: Understood, fromVoice: boolean) {
   } else if (u.intent === "about_my_medicines" && u.answer) {
     await send(`${u.answer}\n\n${footer}`);
   } else {
+    await sendMedicinePhotos(family, meds);
     await send(`${listText(lang, meds)}\n\n${footer}`);
   }
 }
@@ -263,6 +265,7 @@ async function handleButton(family: FamilyRow, buttonId: string) {
   }
   if (buttonId === "list") {
     const meds = await activeMedicines(family.id);
+    await sendMedicinePhotos(family, meds);
     await toParent(family, meds.length ? `${listText(lang, meds)}\n\n${pm(lang, "footer")}` : pm(lang, "noList", v(family)));
     return;
   }

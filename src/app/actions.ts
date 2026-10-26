@@ -126,13 +126,13 @@ export async function uploadStripPhoto(formData: FormData): Promise<ActionResult
   return { ok: true };
 }
 
-/** The child takes a wrong photo off a medicine. The medicine then shows its name only. */
+/** The child takes a wrong photo off a medicine. It then shows its name only, and is not searched again. */
 export async function removeMedicinePhoto(medicineId: string): Promise<ActionResult> {
   const { supabase, family } = await requireFamily();
   if (!UUID.test(medicineId)) return { ok: false, error: "save" };
   const { error } = await supabase
     .from("medicines")
-    .update({ photo_kind: null, photo_path: null, photo_url: null, photo_source: null })
+    .update({ photo_kind: null, photo_path: null, photo_url: null, photo_source: "removed" })
     .eq("id", medicineId)
     .eq("family_id", family.id);
   if (error) return { ok: false, error: "save" };
