@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, Play, ShieldCheck } from "lucide-react";
+import { Check, LoaderCircle, Pause, Play, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { createFamily } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,7 +189,13 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
           </div>
           <div className="flex flex-col gap-1.5">
             <p className="text-sm font-bold text-muted-foreground">{t("firstMsg")}</p>
-            <WelcomePreview text={pm(parentLang, "welcome", { n: callName || "Amma", c: childName.trim() || "…" })} lang={parentLang} />
+            <WelcomePreview
+              key={parentLang}
+              text={pm(parentLang, "welcome", { n: callName || "Amma", c: childName.trim() || "…" })}
+              lang={parentLang}
+              voiceUrl={`/api/welcome-voice?${new URLSearchParams({ lang: parentLang, n: callName || "Amma", c: childName.trim() })}`}
+              labels={{ play: t("playVoice"), pause: t("pauseVoice"), error: t("voiceErr") }}
+            />
           </div>
           <p className="text-sm text-muted-foreground">{t("langNote")}</p>
         </>
@@ -241,16 +247,81 @@ export function SetupWizard({ defaultName }: { defaultName: string }) {
   );
 }
 
-/** What the parent's first WhatsApp will look like: a voice note, then the welcome text. */
-function WelcomePreview({ text, lang }: { text: string; lang: ParentLang }) {
+type VoiceStatus = "idle" | "loading" | "playing" | "error";
+
+/**
+ * What the parent's first WhatsApp will look like: a voice note, then the welcome text.
+ * The voice loads only on the first tap. The parent passes key={lang}, so changing the
+ * language starts a fresh player for the new voice.
+ */
+function WelcomePreview({
+  text,
+  lang,
+  voiceUrl,
+  labels,
+}: {
+  text: string;
+  lang: ParentLang;
+  voiceUrl: string;
+  labels: { play: string; pause: string; error: string };
+}) {
+  const audio = useRef<HTMLAudioElement>(null);
+  const [status, setStatus] = useState<VoiceStatus>("idle");
+  const [progress, setProgress] = useState(0);
+
+  function toggle() {
+    const el = audio.current;
+    if (!el) return;
+    if (status === "playing" || status === "loading") {
+      el.pause();
+      return;
+    }
+    // After a failed load the element stays broken until it is told to fetch again.
+    if (status === "error") el.load();
+    setStatus("loading");
+    el.play().catch(() => setStatus("error"));
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-2xl bg-[#ece5dd] p-3 dark:bg-muted">
-      <div className="flex w-52 items-center gap-2.5 rounded-2xl rounded-bl-sm bg-card px-3 py-2" aria-hidden="true">
-        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary">
-          <Play className="size-3.5 fill-primary-foreground text-primary-foreground" />
+      <audio
+        ref={audio}
+        src={voiceUrl}
+        preload="none"
+        onPlaying={() => setStatus("playing")}
+        onWaiting={() => setStatus("loading")}
+        onPause={() => setStatus((s) => (s === "error" ? s : "idle"))}
+        onEnded={() => setProgress(0)}
+        onTimeUpdate={(e) => {
+          const { currentTime, duration } = e.currentTarget;
+          if (duration > 0 && Number.isFinite(duration)) setProgress(currentTime / duration);
+        }}
+        onError={() => setStatus("error")}
+      />
+      <div className="flex w-52 items-center gap-2.5 rounded-2xl rounded-bl-sm bg-card px-3 py-2">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={status === "playing" || status === "loading" ? labels.pause : labels.play}
+          className="grid size-7 shrink-0 place-items-center rounded-full bg-primary"
+        >
+          {status === "loading" ? (
+            <LoaderCircle className="size-3.5 animate-spin text-primary-foreground" aria-hidden />
+          ) : status === "playing" ? (
+            <Pause className="size-3.5 fill-primary-foreground text-primary-foreground" aria-hidden />
+          ) : (
+            <Play className="size-3.5 fill-primary-foreground text-primary-foreground" aria-hidden />
+          )}
+        </button>
+        <span className="h-1 flex-1 overflow-hidden rounded-full bg-border" aria-hidden="true">
+          <span className="block h-full rounded-full bg-primary" style={{ width: `${progress * 100}%` }} />
         </span>
-        <span className="h-1 flex-1 rounded-full bg-[linear-gradient(90deg,var(--primary)_30%,var(--border)_30%)]" />
       </div>
+      {status === "error" ? (
+        <p role="alert" className="text-sm text-bad">
+          {labels.error}
+        </p>
+      ) : null}
       <p lang={lang} className="max-w-[300px] rounded-2xl rounded-bl-sm bg-card px-3 py-2.5 text-[15px] leading-relaxed">
         {text}
       </p>
