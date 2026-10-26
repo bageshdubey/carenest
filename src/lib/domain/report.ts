@@ -8,19 +8,30 @@ const NUM = String.raw`(\d+(?:\.\d+)?)`;
  * Returns nulls for any bound it cannot read.
  */
 export function parseRange(text: string | null | undefined): { low: number | null; high: number | null } {
-  if (!text) return { low: null, high: null };
+  const none = { low: null, high: null };
+  if (!text) return none;
   const t = text.replace(/,/g, "").toLowerCase();
+  const BETWEEN = `${NUM}\\s*(?:-|–|to)\\s*${NUM}`;
+  const UPPER = `(?:<=?|≤|up to|upto|below|less than)\\s*${NUM}`;
+  const LOWER = `(?:>=?|≥|above|more than|greater than)\\s*${NUM}`;
 
-  const between = t.match(new RegExp(`${NUM}\\s*(?:-|–|to)\\s*${NUM}`));
+  // Several ranges in one ("Male: 13-17 Female: 12-15", "Desirable: <200 Borderline: 200-239 High: >=240"):
+  // which one applies is not ours to pick, so the value gets no flag.
+  const betweens = t.match(new RegExp(BETWEEN, "g")) ?? [];
+  const rest = t.replace(new RegExp(BETWEEN, "g"), " ");
+  const bounds = (rest.match(new RegExp(UPPER, "g")) ?? []).length + (rest.match(new RegExp(LOWER, "g")) ?? []).length;
+  if (betweens.length + bounds > 1) return none;
+
+  const between = t.match(new RegExp(BETWEEN));
   if (between) return { low: Number(between[1]), high: Number(between[2]) };
 
-  const upper = t.match(new RegExp(`(?:<=?|≤|up to|upto|below|less than)\\s*${NUM}`));
+  const upper = t.match(new RegExp(UPPER));
   if (upper) return { low: null, high: Number(upper[1]) };
 
-  const lower = t.match(new RegExp(`(?:>=?|≥|above|more than|greater than)\\s*${NUM}`));
+  const lower = t.match(new RegExp(LOWER));
   if (lower) return { low: Number(lower[1]), high: null };
 
-  return { low: null, high: null };
+  return none;
 }
 
 /**

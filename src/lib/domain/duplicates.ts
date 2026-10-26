@@ -3,8 +3,9 @@
  * Exact names only: "TAB. Amlodipine 5mg" matches "Amlodipine", but a brand never matches
  * its generic. That would be a substitute judgement, which CareNest never makes.
  */
-const FORM_WORDS = /^(tab|tabs|tablet|tablets|cap|caps|capsule|capsules|syp|syrup|inj|injection)\b\.?\s*/;
-const STRENGTH = /\s*\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|iu|units?)\b.*$/;
+const FORM_WORDS = /^(t|tab|tabs|tablet|tablets|c|cap|caps|capsule|capsules|syp|syrup|inj|injection)\b\.?\s*/;
+/** A written strength, with or without a unit: "5mg", "500 mg", "Telma 40". The same medicine at two strengths is still a duplicate. */
+const STRENGTH = /(\s*\d+(\.\d+)?\s*(mg|mcg|µg|g|ml|iu|units?)\b|\s+\d+(\.\d+)?\b).*$/;
 
 /** The part of a medicine name used to compare: lower case, without "Tab." and without a written strength. */
 export function medicineKey(name: string): string {

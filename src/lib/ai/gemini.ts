@@ -76,6 +76,14 @@ async function generateJson<T extends z.ZodType>(schema: T, systemInstruction: s
 }
 
 const READABLE_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+/** Gemini takes at most 20 MB of inline data per request, base64 included. */
+const READABLE_MAX_BYTES = 14 * 1024 * 1024;
+
+/** False for files Gemini would refuse (a Word file, a video, a very large PDF), so the parent is told at once instead of "busy". */
+export function canRead(mimeType: string, bytes?: number): boolean {
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  return (READABLE_TYPES.includes(base) || base.startsWith("image/")) && (bytes === undefined || bytes <= READABLE_MAX_BYTES);
+}
 
 const Tri = z.object({ en: z.string(), hi: z.string(), mr: z.string() });
 
@@ -170,15 +178,26 @@ function describeTest(isText: z.infer<typeof Tri> | null, why: z.infer<typeof Tr
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** "YYYY-MM-DD" that is a real day: Gemini sometimes swaps day and month ("2026-13-01"), and date maths would throw on it. */
+function isRealDate(s: string | null | undefined): s is string {
+  if (!s || !ISO_DATE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** Turns a written follow-up into a future date, counting "after N days" from today. Past or unreadable dates are dropped. */
-function toFollowUp(f: { date: string | null; after_days: number | null; time: string | null } | null): FollowUp | null {
+/**
+ * Turns a written follow-up into a future date. "After N days" counts from the document's date
+ * (an old slip's "review after 7 days" is not a week from now), or from today when it has none.
+ * Past or unreadable dates are dropped.
+ */
+export function toFollowUp(f: { date: string | null; after_days: number | null; time: string | null } | null, from: string | null = null): FollowUp | null {
   if (!f) return null;
   const today = istNow().date;
+  const start = isRealDate(from) && from <= today ? from : today;
   let date: string | null = null;
-  if (f.date && ISO_DATE.test(f.date)) date = f.date;
-  else if (f.after_days && f.after_days > 0 && f.after_days <= 365) date = shiftDate(today, Math.round(f.after_days));
+  if (isRealDate(f.date)) date = f.date;
+  else if (f.after_days && f.after_days > 0 && f.after_days <= 365) date = shiftDate(start, Math.round(f.after_days));
   if (!date || date < today) return null;
   return { date, time: f.time && HH_MM.test(f.time) ? f.time : null };
 }
@@ -202,7 +221,7 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
     const today = istNow().date;
     // A course counts from the prescription date; with no readable date, from the day the photo came in.
     const rxDate = doc.prescription.date_iso;
-    const start = rxDate && ISO_DATE.test(rxDate) && rxDate <= today ? rxDate : today;
+    const start = isRealDate(rxDate) && rxDate <= today ? rxDate : today;
     const medicines: Medicine[] = doc.prescription.medicines.map((m) => {
       const asNeeded = m.as_needed;
       const meals = asNeeded ? [] : toMeals(m);
@@ -222,7 +241,7 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
         asNeeded,
       };
     });
-    return { type: "prescription", medicines, doctor: doc.prescription.doctor, date: doc.prescription.date, followUp: toFollowUp(doc.follow_up), raw: doc };
+    return { type: "prescription", medicines, doctor: doc.prescription.doctor, date: doc.prescription.date, followUp: toFollowUp(doc.follow_up, start), raw: doc };
   }
 
   if (doc.document_type === "lab_report" && doc.lab_report) {

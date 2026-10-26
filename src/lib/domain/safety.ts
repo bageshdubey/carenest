@@ -4,16 +4,20 @@
  * the product detects emergencies.
  */
 const EMERGENCY_PATTERNS: RegExp[] = [
-  // English
-  /\b(fell|fallen|fall down)\b(?!\s*asleep)/i,
-  /\bchest\s*pain\b/i,
+  // English. Not when a thing fell ("my phone fell"), or falling ill or asleep.
+  /(?<!\b(?:phone|mobile|glasses|specs|tablet|tablets|pill|pills|medicine|strip|bottle|key|keys|it)\s+)\b(fell|fallen|fall down)\b(?!\s*(asleep|ill|sick))/i,
+  /(?<!\bno\s+)\bchest\s*(pain|is\s+(very\s+)?(tight|heavy)|tightness|hurts?|hurting)\b/i,
   /\b(can'?t|cannot|unable to|not able to)\s*breathe?\b/i,
+  /\b(difficulty|trouble|problem)\s+(in\s+)?breathing\b/i,
   /\bbreathless(ness)?\b/i,
+  // Too many tablets is a medicine emergency, not an advice question.
+  /\b(overdose|took\s+(\w+\s+){0,3}(twice|double|extra|too many))\b/i,
+  /\b(kill myself|want to die|end my life|suicide)\b/i,
   /\b(unconscious|fainted|fainting|collapsed|stroke|heart attack|seizure)\b/i,
   /\b(heavy\s*)?bleeding\b/i,
   // Hindi (Devanagari). Not when a thing fell ("चश्मा गिर गया", "गोली नीचे गिर गई").
   /(?<!(?:चश्मा|चश्मे|फ़ोन|फोन|मोबाइल|गोली|दवा|दवाई|पर्चा|बोतल|चाबी|गिलास)\s+(?:(?:नीचे|ज़मीन पर|जमीन पर)\s+)?)गिर\s*(गई|गया|गये|गए|पड़ी|पड़ा)/,
-  /(सीने|छाती)\s*में\s*दर्द/,
+  /(सीने|छाती)\s*में\s*(\S+\s+)?दर्द/,
   /सांस\s*(नहीं|लेने में)/,
   /साँस\s*(नहीं|लेने में)/,
   /बेहोश/,
@@ -23,15 +27,17 @@ const EMERGENCY_PATTERNS: RegExp[] = [
   /\b(seene|chhati|chati)\s*(me|mein|main)\s*dard\b/i,
   /\b(saans|sans)\s*(nahi|nahin|lene)\b/i,
   /\bbehosh\b/i,
-  // Marathi. Not "आजारी पडले" (fell ill), "बाहेर पडले" (went out) or "कमी पडले" (fell short).
-  /(?<!(?:आजारी|बाहेर|कमी)\s*)पडल(े|ो|ी)/,
+  // Marathi. Not "आजारी पडले" (fell ill), "बाहेर पडले" (went out), "कमी पडले" (fell short) or "सापडले" (found).
+  /(?<!(?:आजारी|बाहेर|कमी)\s*|सा)पडल(े|ो|ी)/,
   /छातीत\s*दुख/,
   /श्वास\s*(घेता|लागत)/,
   /बेशुद्ध/,
 ];
 
 export function isEmergency(text: string): boolean {
-  return EMERGENCY_PATTERNS.some((re) => re.test(text));
+  // Phones type a curly apostrophe ("can’t"), which the patterns would otherwise miss.
+  const t = text.replace(/[‘’ʼ]/g, "'");
+  return EMERGENCY_PATTERNS.some((re) => re.test(t));
 }
 
 /** Digits only, with India's country code added for 10-digit numbers. */
@@ -47,7 +53,8 @@ export function makeLinkCode(): string {
   return `CN-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
+/** Also finds a code the parent retyped as "CN 4821", "CN4821" or "CN–4821". */
 export function findLinkCode(text: string): string | null {
-  const m = text.toUpperCase().match(/\bCN-\d{4}\b/);
-  return m ? m[0] : null;
+  const m = text.toUpperCase().match(/\bCN\s*[-–—]?\s*(\d{4})\b/);
+  return m ? `CN-${m[1]}` : null;
 }

@@ -1,5 +1,5 @@
 import "server-only";
-import { AiBusyError, type Understood, readDocument, understand } from "@/lib/ai/gemini";
+import { AiBusyError, type Understood, canRead, readDocument, understand } from "@/lib/ai/gemini";
 import {
   activeMedicines,
   addPhotoVisit,
@@ -84,7 +84,11 @@ export async function handleIncoming(msg: Incoming) {
   family = { ...family, last_parent_message_at: new Date().toISOString() };
   const lang = family.parent_lang;
 
-  if (msg.kind === "media") return handleDocument(family, msg.mediaId, msg.mimeType);
+  if (msg.kind === "media") {
+    // A caption is the parent's own words: "I fell" on a photo is still an emergency.
+    if (msg.caption && isEmergency(msg.caption)) await emergency(family, msg.caption);
+    return handleDocument(family, msg.mediaId, msg.mimeType);
+  }
 
   if (msg.kind === "button") return handleButton(family, msg.buttonId);
 
@@ -177,6 +181,10 @@ async function reply(family: FamilyRow, u: Understood, fromVoice: boolean) {
 
 async function handleDocument(family: FamilyRow, mediaId: string, mimeType: string) {
   const lang = family.parent_lang;
+  if (!canRead(mimeType)) {
+    await toParent(family, pm(lang, "notADoc", v(family)));
+    return;
+  }
   // Reading a photo can take up to a minute, so say so straight away (text only, to be quick).
   try {
     await toParent(family, pm(lang, "readingIt", v(family)), [], null);
@@ -189,6 +197,10 @@ async function handleDocument(family: FamilyRow, mediaId: string, mimeType: stri
   });
   if (!media) return;
   const { bytes, mime, photoPath } = media;
+  if (!canRead(mime, bytes.byteLength)) {
+    await toParent(family, pm(lang, "unclearPhoto", v(family)));
+    return;
+  }
   const result = await orBusy(family, () => readDocument(bytes, mime));
   if (!result) return;
 
@@ -263,8 +275,10 @@ function describe(msg: Incoming): string {
   switch (msg.kind) {
     case "text":
       return msg.text;
-    case "media":
-      return msg.mimeType === "application/pdf" ? "[PDF]" : "[Photo]";
+    case "media": {
+      const label = msg.mimeType === "application/pdf" ? "[PDF]" : "[Photo]";
+      return msg.caption ? `${label} ${msg.caption}` : label;
+    }
     case "voice":
       return "[Voice]";
     case "button":

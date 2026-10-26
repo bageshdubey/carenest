@@ -4,8 +4,9 @@ import { addAlert, logMessage } from "@/lib/db/repo";
 import { speak } from "@/lib/ai/sarvam";
 import { VOICE_NOTE_MAX_BYTES, toVoiceNote } from "@/lib/audio";
 import { type Button, sendButtons, sendTemplate, sendText, sendVoice } from "@/lib/whatsapp/client";
+import { splitMessage } from "@/lib/whatsapp/split";
 import type { ChildLang, MealKey } from "@/lib/domain/types";
-import { pm } from "@/lib/i18n/parent";
+import { fill, pm } from "@/lib/i18n/parent";
 
 /** WhatsApp allows at most 1,024 characters in a message with buttons. */
 const BUTTON_BODY_MAX = 1024;
@@ -34,6 +35,16 @@ async function sendVoiceNote(family: FamilyRow, text: string) {
   }
 }
 
+/** Sends a text of any length as one or more WhatsApp messages, in order. Returns the first message's id. */
+async function sendLongText(to: string, body: string): Promise<string | null> {
+  let first: string | null = null;
+  for (const part of splitMessage(body)) {
+    const id = await sendText(to, part);
+    first ??= id;
+  }
+  return first;
+}
+
 /**
  * Sends a message to the parent, voice note first and the text below it, and records the text
  * for the child's Chat tab. `spoken` is what the voice reads (default: the whole text; null: no voice).
@@ -42,7 +53,7 @@ export async function toParent(family: FamilyRow, body: string, buttons: Button[
   if (spoken && inWindow(family)) await sendVoiceNote(family, spoken);
   let id: string | null;
   if (!buttons.length) {
-    id = await sendText(family.parent_phone, body);
+    id = await sendLongText(family.parent_phone, body);
   } else if (body.length <= BUTTON_BODY_MAX) {
     id = await sendButtons(family.parent_phone, body, buttons);
   } else {
@@ -50,7 +61,7 @@ export async function toParent(family: FamilyRow, body: string, buttons: Button[
     const cut = body.lastIndexOf("\n\n");
     const tail = cut > 0 ? body.slice(cut + 2) : "";
     const fits = tail && tail.length <= BUTTON_BODY_MAX;
-    id = await sendText(family.parent_phone, fits ? body.slice(0, cut) : body);
+    id = await sendLongText(family.parent_phone, fits ? body.slice(0, cut) : body);
     await sendButtons(family.parent_phone, fits ? tail : pm(family.parent_lang, "help", { n: family.parent_call_name }), buttons);
   }
   await logMessage(family.id, "out", body, null, id);
@@ -116,14 +127,16 @@ export async function alertChild(
 ) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://carenestapp.vercel.app";
   const lang = family.child_lang;
-  const text = ALERT_TEXT[lang][kind]
-    .replace("{n}", family.parent_call_name)
-    .replace("{url}", `${appUrl}/home`)
-    .replace("{q}", (detail.q ?? "").slice(0, 200))
-    .replace("{k}", String(detail.k ?? ""))
-    .replace("{meal}", detail.meal ? CHILD_MEAL[lang][detail.meal] : "")
-    .replace("{m}", detail.m ?? "")
-    .replace("{p}", family.parent_phone);
+  // One pass, so the parent's own words in {q} are never read as placeholders or "$&" patterns.
+  const text = fill(ALERT_TEXT[lang][kind], {
+    n: family.parent_call_name,
+    url: `${appUrl}/home`,
+    q: (detail.q ?? "").slice(0, 200),
+    k: String(detail.k ?? ""),
+    meal: detail.meal ? CHILD_MEAL[lang][detail.meal] : "",
+    m: detail.m ?? "",
+    p: family.parent_phone,
+  });
 
   await addAlert(family.id, kind, kind === "emergency" ? "urgent" : "check", { ...detail, text }, false);
 }

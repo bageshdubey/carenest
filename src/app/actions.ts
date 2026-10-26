@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AiBusyError, readDocument } from "@/lib/ai/gemini";
-import { toParent } from "@/lib/bot/send";
+import { inWindow, toParent } from "@/lib/bot/send";
 import { admin } from "@/lib/db/admin";
 import { markAlertSeen, markNewListSeen, phoneInUse, savePrescription, uploadPhoto } from "@/lib/db/repo";
 import { toMedicine } from "@/lib/db/rows";
@@ -97,6 +97,34 @@ export async function uploadChildPrescription(formData: FormData): Promise<Actio
   return { ok: true };
 }
 
+const UUID = /^[0-9a-f-]{36}$/;
+const FOODS: Food[] = ["before", "after", "any"];
+const MEAL_KEYS: MealKey[] = ["b", "l", "d"];
+/** Longest text in one field of a medicine, to refuse junk. The Check screen has the same limit. */
+const TEXT_MAX = 200;
+
+/**
+ * Server actions can be called with any payload, not only what the form sends.
+ * A long list still reaches the parent: toParent splits it into several WhatsApp messages.
+ */
+function validMedicine(m: EditedMedicine): boolean {
+  const short = (s: unknown, max: number) => typeof s === "string" && s.length <= max;
+  return (
+    !!m &&
+    (m.id === null || (typeof m.id === "string" && UUID.test(m.id))) &&
+    short(m.name, TEXT_MAX) &&
+    short(m.strength, TEXT_MAX) &&
+    short(m.quantity, TEXT_MAX) &&
+    short(m.purposeText, TEXT_MAX) &&
+    typeof m.endsOn === "string" &&
+    Array.isArray(m.meals) &&
+    m.meals.every((k) => MEAL_KEYS.includes(k)) &&
+    FOODS.includes(m.food) &&
+    typeof m.asNeeded === "boolean" &&
+    typeof m.purposeChanged === "boolean"
+  );
+}
+
 export type EditedMedicine = {
   id: string | null;
   name: string;
@@ -120,6 +148,8 @@ export type EditedMedicine = {
  */
 export async function saveList(mode: "pending" | "active", prescriptionId: string | null, meds: EditedMedicine[], stopIds: string[] = []): Promise<ActionResult> {
   const { supabase, family } = await requireFamily();
+  if (!Array.isArray(meds) || !meds.every(validMedicine) || !Array.isArray(stopIds) || !stopIds.every((id) => UUID.test(id))) return { ok: false, error: "save" };
+  if (prescriptionId !== null && !UUID.test(prescriptionId)) return { ok: false, error: "save" };
   const clean = meds.filter((m) => m.name.trim());
   if (clean.some((m) => !m.asNeeded && m.meals.length === 0)) return { ok: false, error: "meals" };
   if (clean.some((m) => m.endsOn && !ISO_DATE.test(m.endsOn))) return { ok: false, error: "endsOn" };
@@ -176,8 +206,9 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
     }
   }
 
-  // Tell the parent their checked list, if they are already on WhatsApp.
-  if (family.parent_linked_at) {
+  // Tell the parent their checked list, if they are on WhatsApp and wrote in the last 24 hours
+  // (outside that window WhatsApp drops a free message without telling us at once).
+  if (family.parent_linked_at && inWindow(family)) {
     try {
       const { data } = await supabase.from("medicines").select("*").eq("family_id", family.id).eq("active", true).order("created_at");
       const list: Medicine[] = (data ?? []).map(toMedicine);
