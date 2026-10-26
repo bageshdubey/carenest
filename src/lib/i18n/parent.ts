@@ -81,6 +81,7 @@ const MSG = {
     visitMorning: "{n}, today is your doctor visit{t}. Take your prescriptions and reports with you.",
     timeAt: " at {t}",
     sosTitle: "Only when needed (no reminder)",
+    weeklyTitle: "Once a week (no reminder, take it on the day your doctor said)",
     until: "until {d}",
   },
   hi: {
@@ -151,6 +152,7 @@ const MSG = {
     visitMorning: "{n}, आज आपकी डॉक्टर विज़िट है{t}। अपने पर्चे और रिपोर्ट साथ ले जाएँ।",
     timeAt: ", समय {t}",
     sosTitle: "ज़रूरत होने पर (याद नहीं दिलाया जाएगा)",
+    weeklyTitle: "हफ़्ते में एक बार (याद नहीं दिलाया जाएगा, डॉक्टर के बताए दिन लें)",
     until: "{d} तक",
   },
   mr: {
@@ -221,6 +223,7 @@ const MSG = {
     visitMorning: "{n}, आज तुमची डॉक्टर भेट आहे{t}. तुमची प्रिस्क्रिप्शन आणि रिपोर्ट सोबत घ्या.",
     timeAt: ", वेळ {t}",
     sosTitle: "गरज असेल तेव्हा (आठवण केली जाणार नाही)",
+    weeklyTitle: "आठवड्यातून एकदा (आठवण केली जाणार नाही, डॉक्टरांनी सांगितलेल्या दिवशी घ्या)",
     until: "{d} पर्यंत",
   },
 } as const;
@@ -297,6 +300,8 @@ export function listText(lang: ParentLang, meds: Medicine[]): string {
   }
   const sos = meds.filter((m) => m.asNeeded);
   if (sos.length) blocks.push(`${MSG[lang].sosTitle}:\n${sos.map(line).join("\n")}`);
+  const weekly = meds.filter((m) => m.weekly && !m.asNeeded);
+  if (weekly.length) blocks.push(`${MSG[lang].weeklyTitle}:\n${weekly.map(line).join("\n")}`);
   return blocks.join("\n\n");
 }
 

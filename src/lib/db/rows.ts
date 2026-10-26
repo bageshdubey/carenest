@@ -50,6 +50,8 @@ export type MedicineRow = {
   ends_on?: string | null;
   /** "Only when needed" (SOS). Missing until migration 0007 has run. */
   as_needed?: boolean;
+  /** "Once a week". Missing until migration 0012 has run. */
+  weekly?: boolean;
   /** Picture of the medicine. Missing until migration 0011 has run. */
   photo_kind?: "real" | "sample" | null;
   photo_path?: string | null;
@@ -88,6 +90,7 @@ export function toMedicine(r: MedicineRow): Medicine {
     needsCheck: r.needs_check,
     endsOn: r.ends_on ?? null,
     asNeeded: r.as_needed ?? false,
+    weekly: r.weekly ?? false,
     photo: toPhoto(r),
   };
 }
@@ -112,6 +115,7 @@ export function fromMedicine(familyId: string, prescriptionId: string | null, m:
     needs_check: m.needsCheck,
     ends_on: m.endsOn ?? null,
     as_needed: m.asNeeded ?? false,
+    weekly: m.weekly ?? false,
   };
 }
 
