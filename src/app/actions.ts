@@ -164,6 +164,7 @@ function validMedicine(m: EditedMedicine): boolean {
     m.meals.every((k) => MEAL_KEYS.includes(k)) &&
     FOODS.includes(m.food) &&
     typeof m.asNeeded === "boolean" &&
+    typeof m.weekly === "boolean" &&
     typeof m.purposeChanged === "boolean"
   );
 }
@@ -180,6 +181,7 @@ export type EditedMedicine = {
   /** Last day, "YYYY-MM-DD", or empty for no end. */
   endsOn: string;
   asNeeded: boolean;
+  weekly: boolean;
 };
 
 /**
@@ -194,7 +196,7 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
   if (!Array.isArray(meds) || !meds.every(validMedicine) || !Array.isArray(stopIds) || !stopIds.every((id) => UUID.test(id))) return { ok: false, error: "save" };
   if (prescriptionId !== null && !UUID.test(prescriptionId)) return { ok: false, error: "save" };
   const clean = meds.filter((m) => m.name.trim());
-  if (clean.some((m) => !m.asNeeded && m.meals.length === 0)) return { ok: false, error: "meals" };
+  if (clean.some((m) => !m.asNeeded && !m.weekly && m.meals.length === 0)) return { ok: false, error: "meals" };
   if (clean.some((m) => m.endsOn && !ISO_DATE.test(m.endsOn))) return { ok: false, error: "endsOn" };
 
   const scope =
@@ -224,12 +226,13 @@ export async function saveList(mode: "pending" | "active", prescriptionId: strin
         name: m.name.trim(),
         strength: m.strength.trim(),
         quantity: m.quantity.trim() || "1 tablet",
-        meals: m.asNeeded ? [] : m.meals,
+        meals: m.asNeeded || m.weekly ? [] : m.meals,
         food: m.food,
         needs_check: false,
         active: true,
         ends_on: m.asNeeded ? null : m.endsOn || null,
         as_needed: m.asNeeded,
+        weekly: m.weekly && !m.asNeeded,
       };
       if (m.purposeChanged) {
         const t = m.purposeText.trim();

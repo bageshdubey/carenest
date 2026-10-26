@@ -24,6 +24,8 @@ export type Medicine = {
   endsOn?: string | null;
   /** "Only when needed" (SOS): on the list, never reminded. */
   asNeeded?: boolean;
+  /** "Once a week": on the list, never in a daily meal reminder. */
+  weekly?: boolean;
   /** What the medicine looks like, so a parent who can't read the name can find the strip. */
   photo?: MedicinePhoto | null;
 };

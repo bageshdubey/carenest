@@ -302,6 +302,30 @@ export default async function HomePage({ searchParams }: PageProps<"/home">) {
                   ))}
               </Card>
             ) : null}
+            {meds.some((m) => m.weekly && !m.asNeeded) ? (
+              <Card>
+                <CardHead title={t("weekly")} />
+                <p className="text-xs text-muted-foreground">{t("weeklyNote")}</p>
+                {meds
+                  .filter((m) => m.weekly && !m.asNeeded)
+                  .map((m) => (
+                    <div key={`weekly-${m.id}`} className="flex items-center gap-3 py-1">
+                      <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-primary">
+                        <PillIcon className="size-4" aria-hidden />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-mono font-medium">
+                          {m.name} {m.strength}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {m.quantity}
+                          {m.purpose ? ` · ${m.purpose[lang]}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+              </Card>
+            ) : null}
             <div className="flex gap-2">
               {meds.length ? (
                 <Link href="/check" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12 flex-1 rounded-xl")}>
@@ -614,7 +638,7 @@ function RxHistory({ prescriptions, medicines, t, lang }: { prescriptions: Presc
     <div key={m.id} className="flex items-center gap-2 border-b py-2 last:border-0">
       <div className="min-w-0 flex-1">
         <p className="font-mono text-sm font-medium">{`${m.name} ${m.strength}`.trim()}</p>
-        <p className="text-xs text-muted-foreground">{m.as_needed ? t("asNeeded") : toMedicine(m).meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
+        <p className="text-xs text-muted-foreground">{m.as_needed ? t("asNeeded") : m.weekly ? t("weekly") : toMedicine(m).meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
       </div>
       {m.active ? (
         <Pill tone="ok">{t("ongoingPill")}</Pill>

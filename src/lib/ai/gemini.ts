@@ -109,6 +109,7 @@ const DocumentSchema = z.object({
             .nullable()
             .describe('How many days to take it, only if written for this line or for the whole slip ("x 7 days", "for 5 days", "1 week" is 7). Null if not written or "continue".'),
           as_needed: z.boolean().describe('True if it is taken only when needed: "SOS", "PRN", "as needed", "if pain", "if fever", "when required".'),
+          weekly: z.boolean().describe('True if it is taken once a week: "once a week", "weekly", "1/week", "every Sunday". Not "for 1 week", which is a course length.'),
           purpose_written: Tri.nullable().describe("Only if the prescription itself says what it is for. Short, plain words, in English, Hindi and Marathi."),
           purpose_general: Tri.nullable().describe("What this medicine is generally used for, 1 to 3 plain words. Null if unsure."),
           unclear: z.boolean().describe("True if any part of this line was hard to read."),
@@ -158,6 +159,7 @@ const READ_SYSTEM = `You read photos of Indian prescriptions and lab reports for
 Copy what is written. Do not guess medicine names: if a name is hard to read, give your best reading and set unclear to true.
 Map timings: morning or 1-0-0 to morning, afternoon or 0-1-0 to afternoon, night, bedtime or 0-0-1 to night. "BD" means morning and night. "TDS" means morning, afternoon and night. "OD" means once a day; use morning unless the slip says otherwise.
 A medicine taken only when needed ("SOS", "PRN", "as needed", "if pain") gets as_needed true and no morning, afternoon or night.
+A medicine taken once a week ("once a week", "weekly", "every Sunday") gets weekly true and no morning, afternoon or night. "For 1 week" is a course of 7 days, not weekly.
 Copy how many days only if it is written; never work out a course length yourself.
 For lab reports, copy each test, its value and the reference range printed on the report. Never say whether a value is good or bad.
 If the document says when to come back (follow-up, review, next visit, "SOS" does not count), fill follow_up. Otherwise set it to null.
@@ -224,7 +226,8 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
     const start = isRealDate(rxDate) && rxDate <= today ? rxDate : today;
     const medicines: Medicine[] = doc.prescription.medicines.map((m) => {
       const asNeeded = m.as_needed;
-      const meals = asNeeded ? [] : toMeals(m);
+      const weekly = !asNeeded && m.weekly;
+      const meals = asNeeded || weekly ? [] : toMeals(m);
       const purpose = m.purpose_written ?? m.purpose_general;
       const endsOn = asNeeded ? null : courseEnd(start, m.days);
       return {
@@ -236,9 +239,11 @@ export async function readDocument(bytes: ArrayBuffer, mimeType: string): Promis
         purpose,
         purposeSource: m.purpose_written ? "prescription" : m.purpose_general ? "suggested" : "none",
         // A course already over on an old slip is marked, so the child decides before it is used.
-        needsCheck: m.unclear || (!asNeeded && meals.length === 0) || m.food === "unknown" || courseEnded(endsOn, today),
+        // A weekly medicine is always marked, so the child confirms it isn't a daily one.
+        needsCheck: m.unclear || weekly || (!asNeeded && meals.length === 0) || m.food === "unknown" || courseEnded(endsOn, today),
         endsOn,
         asNeeded,
+        weekly,
       };
     });
     return { type: "prescription", medicines, doctor: doc.prescription.doctor, date: doc.prescription.date, followUp: toFollowUp(doc.follow_up, start), raw: doc };
@@ -318,6 +323,7 @@ export async function understand(
     food: m.food,
     for: m.purpose?.en ?? null,
     only_when_needed: m.asNeeded ?? false,
+    once_a_week: m.weekly ?? false,
     last_day: m.endsOn ?? null,
   }));
   const langName = { en: "English", hi: "Hindi", mr: "Marathi" }[lang];

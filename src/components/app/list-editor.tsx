@@ -57,6 +57,7 @@ export function ListEditor({
       purposeChanged: false,
       endsOn: m.endsOn ?? "",
       asNeeded: m.asNeeded ?? false,
+      weekly: m.weekly ?? false,
       needsCheck: m.needsCheck,
       source: m.purposeSource,
       editing: m.needsCheck,
@@ -84,7 +85,7 @@ export function ListEditor({
   function save() {
     setError("");
     const live = rows.filter((r) => r.name.trim());
-    if (live.some((r) => !r.asNeeded && r.meals.length === 0)) return setError(t("mealNeedErr"));
+    if (live.some((r) => !r.asNeeded && !r.weekly && r.meals.length === 0)) return setError(t("mealNeedErr"));
     if (live.some((r) => r.needsCheck && r.editing)) return setError(t("checkFlagErr"));
     if (others.some((m) => keep[m.id!] === undefined)) return setError(t("ongoingChooseErr"));
     const stopIds = others.filter((m) => keep[m.id!] === false).map((m) => m.id!);
@@ -131,14 +132,18 @@ export function ListEditor({
             <p className="text-sm text-muted-foreground">{t("whichMeals")}</p>
             <div className="flex flex-wrap gap-2">
               {(["b", "l", "d"] as MealKey[]).map((k) => (
-                <Toggle key={k} on={!r.asNeeded && r.meals.includes(k)} onClick={() => update(i, { asNeeded: false, meals: toggled(r.meals, k) })}>
+                <Toggle key={k} on={!r.asNeeded && !r.weekly && r.meals.includes(k)} onClick={() => update(i, { asNeeded: false, weekly: false, meals: toggled(r.meals, k) })}>
                   {CHILD_MEALS[lang][k]}
                 </Toggle>
               ))}
-              <Toggle on={r.asNeeded} onClick={() => update(i, { asNeeded: !r.asNeeded })}>
+              <Toggle on={r.asNeeded} onClick={() => update(i, { asNeeded: !r.asNeeded, weekly: false })}>
                 {t("asNeeded")}
               </Toggle>
+              <Toggle on={r.weekly && !r.asNeeded} onClick={() => update(i, { weekly: !r.weekly, asNeeded: false })}>
+                {t("weekly")}
+              </Toggle>
             </div>
+            {r.weekly && !r.asNeeded ? <p className="text-xs text-muted-foreground">{t("weeklyNote")}</p> : null}
             {r.asNeeded ? (
               <p className="text-xs text-muted-foreground">{t("asNeededNote")}</p>
             ) : (
@@ -171,7 +176,7 @@ export function ListEditor({
                 {r.name} {r.strength}
               </p>
               <p className="text-sm">
-                {r.quantity} · {r.asNeeded ? t("asNeeded") : r.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")} · {CHILD_FOOD[lang][r.food]}
+                {r.quantity} · {r.asNeeded ? t("asNeeded") : r.weekly ? t("weekly") : r.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")} · {CHILD_FOOD[lang][r.food]}
               </p>
               {!r.asNeeded && r.endsOn ? <p className="text-sm">{t("until", { d: shortDate(r.endsOn, lang) })}</p> : null}
               <p className="text-xs text-muted-foreground">
@@ -199,7 +204,7 @@ export function ListEditor({
             <div key={m.id} className="flex flex-col gap-2 border-t pt-3">
               <div>
                 <p className="font-mono font-medium">{`${m.name} ${m.strength}`.trim()}</p>
-                <p className="text-xs text-muted-foreground">{m.asNeeded ? t("asNeeded") : m.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
+                <p className="text-xs text-muted-foreground">{m.asNeeded ? t("asNeeded") : m.weekly ? t("weekly") : m.meals.map((k) => CHILD_MEALS[lang][k]).join(", ")}</p>
               </div>
               <div className="flex gap-2">
                 <Toggle on={keep[m.id!] === true} onClick={() => setKeep({ ...keep, [m.id!]: true })}>

@@ -21,9 +21,9 @@ export function mealsInOrder(times: MealTimes): boolean {
   return toMinutes(times.b) < toMinutes(times.l) && toMinutes(times.l) < toMinutes(times.d);
 }
 
-/** Medicines reminded at this meal. "Only when needed" medicines never are. */
+/** Medicines reminded at this meal. "Only when needed" and "once a week" medicines never are. */
 export function medicinesFor(meal: MealKey, meds: Medicine[]): Medicine[] {
-  return meds.filter((m) => !m.asNeeded && m.meals.includes(meal));
+  return meds.filter((m) => !m.asNeeded && !m.weekly && m.meals.includes(meal));
 }
 
 /** How long after a meal time a dose stays open before it counts as not marked. */

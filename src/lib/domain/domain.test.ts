@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueReminders, formatTime, isOverdue, istNow, mealsInOrder } from "./meals";
+import { dueReminders, formatTime, isOverdue, istNow, mealsInOrder, medicinesFor } from "./meals";
 import { flagValue, parseRange } from "./report";
 import { findLinkCode, isEmergency, normalisePhone } from "./safety";
 import type { Medicine } from "./types";
@@ -175,5 +175,21 @@ describe("parent messages", () => {
     expect(q).toContain("HbA1c is above");
     expect(q).not.toContain("Haemoglobin");
     expect(q).toContain("Rohan");
+  });
+});
+
+describe("once a week medicines", () => {
+  const weeklyMed = { ...med("Vitamin D3", []), weekly: true };
+  const daily = med("Amlodipine", ["b"]);
+
+  it("are never in a meal reminder", () => {
+    for (const meal of ["b", "l", "d"] as const) expect(medicinesFor(meal, [weeklyMed, daily]).map((m) => m.name)).not.toContain("Vitamin D3");
+    expect(medicinesFor("b", [weeklyMed, daily]).map((m) => m.name)).toEqual(["Amlodipine"]);
+  });
+
+  it("show in the parent's full list under their own heading", () => {
+    const text = listText("en", [daily, weeklyMed]);
+    expect(text).toContain("Once a week (no reminder, take it on the day your doctor said):\n• Vitamin D3 5 mg");
+    expect(text.indexOf("Breakfast:")).toBeLessThan(text.indexOf("Once a week"));
   });
 });
